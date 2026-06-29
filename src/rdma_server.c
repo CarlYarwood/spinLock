@@ -1,32 +1,35 @@
+
 #include "rdma_common.h"
 
 #define MAX_CONN (10)
+#define NEXT (0)
+#define NOW (1)
 
-struct s_spin_ctx {
+struct s_ticket_ctx {
     struct rdma_cm_id* client_id;
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
     struct ibv_cq* cq;
-    struct ibv_mr* lock_mr;
+    struct ibv_mr* ticket_mr;
     struct ibv_mr* server_metadata_mr;
     struct rdma_buffer_attr* server_metadata_attr;
 };
 
-uint64_t *lock = NULL;
+uint64_t *ticket = NULL;
 
-struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
-    struct s_spin_ctx* ctx;
+struct s_ticket_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
+    struct s_ticket_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
-    struct ibv_mr *lock_mr = NULL;
+    struct ibv_mr *ticket_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr;
     struct rdma_conn_param conn_param;
 
     
-    ctx = (struct s_spin_ctx*)malloc(sizeof(struct s_spin_ctx));
+    ctx = (struct s_ticket_ctx*)malloc(sizeof(struct s_ticket_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
 
     pd = ibv_alloc_pd(client_id->verbs);
@@ -86,8 +89,8 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         return NULL;
     }
 
-    lock_mr = rdma_buffer_register(pd, lock, sizeof(*lock), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
-    if(!lock_mr){
+    ticket_mr = rdma_buffer_register(pd, ticket, sizeof(uint64_t) * 2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    if(!ticket_mr){
         rdma_error("Server failed to create lock memory region \n");
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
@@ -97,13 +100,13 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         return NULL;
     }
 
-    (*server_metadata_attr).address = (uint64_t)lock_mr->addr;
-    (*server_metadata_attr).length = (uint32_t)lock_mr->length;
-    (*server_metadata_attr).stag.remote_stag = (uint32_t)lock_mr->rkey;
+    (*server_metadata_attr).address = (uint64_t)ticket_mr->addr;
+    (*server_metadata_attr).length = (uint32_t)ticket_mr->length;
+    (*server_metadata_attr).stag.remote_stag = (uint32_t)ticket_mr->rkey;
     server_metadata_mr = rdma_buffer_register(pd, server_metadata_attr, sizeof(*server_metadata_attr), (IBV_ACCESS_LOCAL_WRITE));
     if(!server_metadata_mr){
         rdma_error("Server failed to create to hold server metadata \n");
-        rdma_buffer_free(lock_mr);
+        rdma_buffer_free(ticket_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
@@ -116,13 +119,13 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     (*ctx).pd = pd;
     (*ctx).comp = comp;
     (*ctx).cq = cq;  
-    (*ctx).lock_mr = lock_mr;
+    (*ctx).ticket_mr = ticket_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
     (*ctx).server_metadata_attr = server_metadata_attr;
     return ctx;
 }
 
-int send_server_metadata(struct s_spin_ctx* ctx) {
+int send_server_metadata(struct s_ticket_ctx* ctx) {
     struct ibv_wc wc;
     struct ibv_sge server_send_sge;
     struct ibv_send_wr server_send_wr, *bad_server_send_wr = NULL;
@@ -149,7 +152,7 @@ int send_server_metadata(struct s_spin_ctx* ctx) {
     return 0;
 }
 
-int clean_up_context(struct s_spin_ctx* ctx) {
+int clean_up_context(struct s_ticket_ctx* ctx) {
     rdma_destroy_qp(ctx->client_id);
 	if (rdma_destroy_id(ctx->client_id)) {
 	    rdma_error("Failed to destroy client id cleanly, %d \n", -errno);
@@ -165,7 +168,7 @@ int clean_up_context(struct s_spin_ctx* ctx) {
         rdma_error("Failed to destroy completion channel cleanly, %d \n", -errno);
         return -errno;
     }
-    rdma_buffer_free(ctx->lock_mr);
+    rdma_buffer_free(ctx->ticket_mr);
     rdma_buffer_deregister(ctx->server_metadata_mr);
 
 
@@ -177,8 +180,8 @@ int clean_up_context(struct s_spin_ctx* ctx) {
     return 0;
 }
 
-struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id* client_id) {
-    struct s_spin_ctx* ret = NULL;
+struct s_ticket_ctx* get_ctx_by_id(struct s_ticket_ctx** ctx_arr, struct rdma_cm_id* client_id) {
+    struct s_ticket_ctx* ret = NULL;
     struct sockaddr_in client_sockaddr;
 
     memcpy(&client_sockaddr, rdma_get_peer_addr(client_id), sizeof(struct sockaddr_in));
@@ -196,8 +199,8 @@ struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id*
     return ret;
 }
 
-struct s_spin_ctx* pop_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id* client_id) {
-    struct s_spin_ctx* ret = NULL;
+struct s_ticket_ctx* pop_ctx_by_id(struct s_ticket_ctx** ctx_arr, struct rdma_cm_id* client_id) {
+    struct s_ticket_ctx* ret = NULL;
     struct sockaddr_in client_sockaddr;
 
     memcpy(&client_sockaddr, rdma_get_peer_addr(client_id), sizeof(struct sockaddr_in));
@@ -221,16 +224,18 @@ int main(int argc, char** argv) {
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
-    struct s_spin_ctx** ctx_arr;
+    struct s_ticket_ctx** ctx_arr;
 
-    ctx_arr = (struct s_spin_ctx**)malloc(sizeof(struct s_spin_ctx*)*MAX_CONN);
+    ctx_arr = (struct s_ticket_ctx**)malloc(sizeof(struct s_ticket_ctx*)*MAX_CONN);
 
     for (int i = 0; i < MAX_CONN; i++) {
         ctx_arr[i] = NULL;
     }
 
-    lock = calloc(1, sizeof(uint64_t));
-    *lock = 0;
+    ticket = malloc(sizeof(uint64_t) * 2);
+    ticket[NEXT] = 0;
+    ticket[NOW] = 0;
+
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -278,7 +283,7 @@ int main(int argc, char** argv) {
 
     do {
         struct rdma_cm_event *cm_event = NULL;
-        struct s_spin_ctx* ctx = NULL;
+        struct s_ticket_ctx* ctx = NULL;
     
         if (rdma_get_cm_event(cm_event_channel, &cm_event)) {
 		  rdma_error("Failed to retrieve a cm event, errno: %d \n", -errno);
