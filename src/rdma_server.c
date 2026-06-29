@@ -1,10 +1,6 @@
 
 #include "rdma_common.h"
 
-#define MAX_CONN (10)
-#define NEXT (0)
-#define NOW (1)
-
 struct s_ticket_ctx {
     struct rdma_cm_id* client_id;
     struct ibv_pd* pd;

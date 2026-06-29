@@ -1,8 +1,5 @@
 #include "rdma_common.h"
 
-#define NEXT (0)
-#define NOW (1)
-
 struct c_ticket_ctx {
 	struct rdma_cm_id* client_id;
 	struct ibv_pd* pd;
