@@ -225,10 +225,11 @@ int release_lock(struct c_spin_ctx *ctx) {
         return -1;
     }
     printf("lock release successful\n");
-	return 0
+	return 0;
 }
 
 struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr) {
+	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
 	struct rdma_conn_param conn_param;
@@ -379,14 +380,14 @@ int main(int argc, char** argv) {
 
     ctx = connect_to_server(cm_event_channel, &server_sockaddr);
 	e_setup = clock();
-	printf("%f seconds to steup\n", ((double)(b_setup-e_setup)/CLOCKS_PER_SECOND));
+	printf("%f seconds to steup\n", ((double)(b_setup-e_setup)/CLOCKS_PER_SEC));
 
     //lock
 	b_acquire = clock();
     acquire_lock(ctx);
 	e_acquire = clock();
     printf("lock acquired\n");
-	printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SECOND));
+	printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
     //work
 
     //unlock
@@ -394,7 +395,7 @@ int main(int argc, char** argv) {
 	release_lock(ctx);
 	e_release = clock();
 
-	printf("%f seconds to relsease\n", ((double)(b_release-e_release)/CLOCKS_PER_SECOND));
+	printf("%f seconds to relsease\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
 
 
 	b_shutdown = clock();
@@ -408,6 +409,6 @@ int main(int argc, char** argv) {
 	rdma_destroy_event_channel(cm_event_channel);
 	e_shutdown = clock();
 	printf("Client resource clean up is complete \n");
-	printf("%f seconds to shutdown\n", ((double)(b_shutdown-e_shutdown)/CLOCKS_PER_SECOND));
+	printf("%f seconds to shutdown\n", ((double)(b_shutdown-e_shutdown)/CLOCKS_PER_SEC));
 	return 0;
 }
