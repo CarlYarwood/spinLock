@@ -12,7 +12,7 @@ struct c_ticket_ctx {
 
 uint64_t *response = NULL;
 
-struct c_ticket_ctx* build_client_spin_context(struct rdma_cm_id* client_id) {
+struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id) {
 	struct c_ticket_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -235,17 +235,147 @@ int rdma_read(struct c_ticket_ctx *ctx, int offset) {
 
 }
 
+struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr) {
+	struct c_ticket_ctx *ctx = NULL;
+	struct rdma_cm_id *cm_client_id = NULL;
+	struct rdma_cm_event *cm_event = NULL;
+	struct rdma_conn_param conn_param;
+	struct ibv_wc wc;
+
+	if (rdma_create_id(cm_event_channel, &cm_client_id, NULL, RDMA_PS_TCP)) {
+		rdma_error("Creating cm id failed with errno: %d \n", -errno); 
+		return NULL;
+	}
+
+	if (rdma_resolve_addr(cm_client_id, NULL, (struct sockaddr*) server_sockaddr, 2000)) {
+		rdma_error("Failed to resolve address, errno: %d \n", -errno);
+		return NULL;
+	}
+
+	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ADDR_RESOLVED, &cm_event)) {
+		perror("Failed to receive a valid event, ret = %d \n");
+		return NULL;
+	}
+
+	if (rdma_ack_cm_event(cm_event)) {
+		rdma_error("Failed to acknowledge the CM event, errno: %d\n", -errno);
+		return NULL;
+	}
+
+	if (rdma_resolve_route(cm_client_id, 2000)) {
+		rdma_error("Failed to resolve route, erno: %d \n", -errno);
+	       return NULL;
+	}
+	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
+
+	ctx = build_client_ticket_context(cm_client_id);
+	if (!ctx) {
+		perror("Failed to build context\n");
+		return NULL;
+	}
+
+	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ROUTE_RESOLVED, &cm_event)) {
+		perror("Failed to receive a valid event, ret = %d \n");
+		return NULL;
+	}
+
+    if (rdma_ack_cm_event(cm_event)) {
+		rdma_error("Failed to acknowledge the CM event, errno: %d \n", -errno);
+		return NULL;
+	}
+
+
+    bzero(&conn_param, sizeof(conn_param));
+	conn_param.initiator_depth = 3;
+	conn_param.responder_resources = 3;
+	conn_param.retry_count = 3;
+	if (rdma_connect(ctx->client_id, &conn_param)) {
+		rdma_error("Failed to connect to remote host , errno: %d\n", -errno);
+		return NULL;
+	}
+	debug("waiting for cm event: RDMA_CM_EVENT_ESTABLISHED\n");
+
+	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ESTABLISHED, &cm_event)) {
+		perror("Failed to get cm event, ret = %d \n");
+	    return NULL;
+	}
+
+	if (rdma_ack_cm_event(cm_event)) {
+		rdma_error("Failed to acknowledge cm event, errno: %d\n", -errno);
+		return NULL;
+	}
+
+	printf("The client is connected successfully \n");
+	if(process_work_completion_events(ctx->comp, &wc, 1) != 1) {
+		perror("We failed to get 1 work completions \n");
+		return NULL;
+	}
+
+	return ctx;
+}
+
+int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c_ticket_ctx* ctx){
+	struct rdma_cm_event *cm_event = NULL;
+	int ret = 0;
+	if (rdma_disconnect(ctx->client_id)) {
+		rdma_error("Failed to disconnect, errno: %d \n", -errno);
+		ret = -1;
+		//continuing anyways
+	}
+	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
+		perror("Failed to get RDMA_CM_EVENT_DISCONNECTED event, ret = %d\n");
+		ret = -1;
+		//continuing anyways 
+	}
+	if (rdma_ack_cm_event(cm_event)) {
+		rdma_error("Failed to acknowledge cm event, errno: %d\n", -errno);
+		ret = -1;
+		//continuing anyways
+	}
+			
+	if(destroy_context(ctx)) {
+		perror("Failed to detroy context fully");
+		ret = -1;
+	}
+
+	free(ctx);
+
+	return ret;
+}
+
+int acquire_lock(struct c_ticket_ctx*  ctx) {
+	int test = 1;
+	uint64_t ticket;
+	do {
+		test = fetch_and_add(ctx, NEXT);
+	} while(test != 0);
+	ticket = *response;
+	do {
+		if(rdma_read(ctx, NOW) != 0) {
+			printf("read fail\n");
+		}
+	} while(ticket != *response);
+
+	return 0
+}
+
+int release_lock(struct c_ticket_ctx) {
+	fetch_and_add(ctx, NOW);
+    if(*response != ticket) {
+        perror("de-latch failed\n");
+        return -1;
+    }
+    printf("de-latch successful\n");
+	return 0;
+}
+
 int main(int argc, char** argv) {
-    struct sockaddr_in server_sockaddr;
+	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
-    struct rdma_cm_id *cm_client_id = NULL;
-    struct rdma_cm_event *cm_event = NULL;
-    struct ibv_wc wc;
-    struct rdma_conn_param conn_param;
-    struct ibv_sge server_recv_sge;
-    struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
     struct c_ticket_ctx *ctx = NULL;
     int option;
+	clock_t b_setup, e_setup, b_acquire, e_acquire, b_release, e_release, b_shutdown, e_shutdown; 
+	b_setup = clock();
     response = calloc(1, sizeof(uint64_t));
     *response = 1;
 
@@ -279,119 +409,38 @@ int main(int argc, char** argv) {
 		return -errno;
 	}
 
-    if (rdma_create_id(cm_event_channel, &cm_client_id, NULL, RDMA_PS_TCP)) {
-		rdma_error("Creating cm id failed with errno: %d \n", -errno); 
-		return -errno;
-	}
+    ctx = connect_to_server(cm_event_channel, &server_sockaddr);
+	e_setup = clock();
+	printf("%f seconds to steup\n", ((double)(b_setup-e_setup)/CLOCKS_PER_SEC));
 
-	if (rdma_resolve_addr(cm_client_id, NULL, (struct sockaddr*) &server_sockaddr, 2000)) {
-		rdma_error("Failed to resolve address, errno: %d \n", -errno);
-		return -errno;
-	}
-
-	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ADDR_RESOLVED, &cm_event)) {
-		perror("Failed to receive a valid event, ret = %d \n");
-		return -1;
-	}
-
-	if (rdma_ack_cm_event(cm_event)) {
-		rdma_error("Failed to acknowledge the CM event, errno: %d\n", -errno);
-		return -errno;
-	}
-
-	if (rdma_resolve_route(cm_client_id, 2000)) {
-		rdma_error("Failed to resolve route, erno: %d \n", -errno);
-	       return -errno;
-	}
-	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
-
-	ctx = build_client_spin_context(cm_client_id);
-	if (!ctx) {
-		perror("Failed to build context\n");
-		return -1;
-	}
-
-	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ROUTE_RESOLVED, &cm_event)) {
-		perror("Failed to receive a valid event, ret = %d \n");
-		return -1;
-	}
-
-    if (rdma_ack_cm_event(cm_event)) {
-		rdma_error("Failed to acknowledge the CM event, errno: %d \n", -errno);
-		return -errno;
-	}
-
-
-    bzero(&conn_param, sizeof(conn_param));
-	conn_param.initiator_depth = 3;
-	conn_param.responder_resources = 3;
-	conn_param.retry_count = 3;
-	if (rdma_connect(ctx->client_id, &conn_param)) {
-		rdma_error("Failed to connect to remote host , errno: %d\n", -errno);
-		return -errno;
-	}
-	debug("waiting for cm event: RDMA_CM_EVENT_ESTABLISHED\n");
-
-	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ESTABLISHED, &cm_event)) {
-		perror("Failed to get cm event, ret = %d \n");
-	    return -1;
-	}
-
-	if (rdma_ack_cm_event(cm_event)) {
-		rdma_error("Failed to acknowledge cm event, errno: %d\n", -errno);
-		return -errno;
-	}
-
-	printf("The client is connected successfully \n");
-	if(process_work_completion_events(ctx->comp, &wc, 1) != 1) {
-		perror("We failed to get 1 work completions \n");
-		return -1;
-	}
-
-     //latch
-	int test = 1;
-	uint64_t ticket;
-	do {
-		test = fetch_and_add(ctx, NEXT);
-	} while(test != 0);
-	ticket = *response;
-	do {
-		if(rdma_read(ctx, NOW) != 0) {
-			printf("read fail\n");
-		}
-	} while(ticket != *response);
-    printf("latch successful\n");
+    //lock
+	b_acquire = clock();
+    acquire_lock(ctx);
+	e_acquire = clock();
+    printf("lock acquired\n");
+	printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
     //work
 
-    //de-latch
-    fetch_and_add(ctx, NOW);
-    if(*response != ticket) {
-        perror("de-latch failed\n");
-        return -1;
-    }else {
-        printf("de-latch successful\n");
-    }
+    //unlock
+	b_release = clock();
+	release_lock(ctx);
+	e_release = clock();
 
-	if (rdma_disconnect(ctx->client_id)) {
-		rdma_error("Failed to disconnect, errno: %d \n", -errno);
-		//continuing anyways
-	}
-	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
-		perror("Failed to get RDMA_CM_EVENT_DISCONNECTED event, ret = %d\n");
-		//continuing anyways 
-	}
-	if (rdma_ack_cm_event(cm_event)) {
-		rdma_error("Failed to acknowledge cm event, errno: %d\n", -errno);
-		//continuing anyways
-	}
-			
-	destroy_context(ctx);
+	printf("%f seconds to release\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
+
+
+	b_shutdown = clock();
+	disconnect_from_server(cm_event_channel, ctx);	
 	/* We free the buffers */
+	free(node_id);
 	free(response);
-    free(ctx);
+
 	/* Destroy protection domain */
 	
 	rdma_destroy_event_channel(cm_event_channel);
+	e_shutdown = clock();
 	printf("Client resource clean up is complete \n");
+	printf("%f seconds to shutdown\n", ((double)(b_shutdown-e_shutdown)/CLOCKS_PER_SEC));
 	return 0;
 }
+    
