@@ -343,7 +343,7 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 	return ret;
 }
 
-int acquire_lock(struct c_ticket_ctx*  ctx) {
+uint64_t acquire_lock(struct c_ticket_ctx*  ctx) {
 	int test = 1;
 	uint64_t ticket;
 	do {
@@ -356,10 +356,10 @@ int acquire_lock(struct c_ticket_ctx*  ctx) {
 		}
 	} while(ticket != *response);
 
-	return 0
+	return ticket;
 }
 
-int release_lock(struct c_ticket_ctx) {
+int release_lock(struct c_ticket_ctx ctx, uint64_t ticket) {
 	fetch_and_add(ctx, NOW);
     if(*response != ticket) {
         perror("de-latch failed\n");
@@ -374,6 +374,7 @@ int main(int argc, char** argv) {
     struct rdma_event_channel *cm_event_channel = NULL;
     struct c_ticket_ctx *ctx = NULL;
     int option;
+	uint64_t ticket;
 	clock_t b_setup, e_setup, b_acquire, e_acquire, b_release, e_release, b_shutdown, e_shutdown; 
 	b_setup = clock();
     response = calloc(1, sizeof(uint64_t));
@@ -415,7 +416,7 @@ int main(int argc, char** argv) {
 
     //lock
 	b_acquire = clock();
-    acquire_lock(ctx);
+    ticket = acquire_lock(ctx);
 	e_acquire = clock();
     printf("lock acquired\n");
 	printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
@@ -423,7 +424,7 @@ int main(int argc, char** argv) {
 
     //unlock
 	b_release = clock();
-	release_lock(ctx);
+	release_lock(ctx, ticket);
 	e_release = clock();
 
 	printf("%f seconds to release\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
@@ -432,7 +433,6 @@ int main(int argc, char** argv) {
 	b_shutdown = clock();
 	disconnect_from_server(cm_event_channel, ctx);	
 	/* We free the buffers */
-	free(node_id);
 	free(response);
 
 	/* Destroy protection domain */
