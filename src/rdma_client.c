@@ -395,7 +395,7 @@ int main(int argc, char** argv) {
 	release_lock(ctx);
 	e_release = clock();
 
-	printf("%f seconds to relsease\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
+	printf("%f seconds to release\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
 
 
 	b_shutdown = clock();
