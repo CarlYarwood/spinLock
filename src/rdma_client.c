@@ -359,7 +359,7 @@ uint64_t acquire_lock(struct c_ticket_ctx*  ctx) {
 	return ticket;
 }
 
-int release_lock(struct c_ticket_ctx ctx, uint64_t ticket) {
+int release_lock(struct c_ticket_ctx* ctx, uint64_t ticket) {
 	fetch_and_add(ctx, NOW);
     if(*response != ticket) {
         perror("de-latch failed\n");
