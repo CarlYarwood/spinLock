@@ -350,7 +350,7 @@ int main(int argc, char** argv) {
     *response = 1;
     *node_id = 1;
 	noncritical_section = 1;
-	cretical_section = 1;
+	critical_section = 1;
 
     bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET;
