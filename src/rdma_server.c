@@ -15,6 +15,7 @@ struct s_spin_ctx {
 uint64_t *lock = NULL;
 
 struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
+    printf("ctx build");
     struct s_spin_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -123,6 +124,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
 }
 
 int send_server_metadata(struct s_spin_ctx* ctx) {
+    printf("send metadata");
     struct ibv_wc wc;
     struct ibv_sge server_send_sge;
     struct ibv_send_wr server_send_wr, *bad_server_send_wr = NULL;
@@ -150,6 +152,7 @@ int send_server_metadata(struct s_spin_ctx* ctx) {
 }
 
 int clean_up_context(struct s_spin_ctx* ctx) {
+    printf("clean up");
     rdma_destroy_qp(ctx->client_id);
 	if (rdma_destroy_id(ctx->client_id)) {
 	    rdma_error("Failed to destroy client id cleanly, %d \n", -errno);
