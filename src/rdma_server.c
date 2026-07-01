@@ -371,7 +371,7 @@ int main(int argc, char** argv) {
 		        rdma_ack_cm_event(cm_event);
 		        return -1;
         }
-    } while(num_conn > 0);
+    } while(1);
 
 	if (rdma_destroy_id(cm_server_id)) {
 		rdma_error("Failed to destroy server id cleanly, %d \n", -errno);
