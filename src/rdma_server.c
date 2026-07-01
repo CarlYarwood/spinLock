@@ -168,7 +168,7 @@ int clean_up_context(struct s_spin_ctx* ctx) {
         rdma_error("Failed to destroy completion channel cleanly, %d \n", -errno);
         return -errno;
     }
-    rdma_buffer_free(ctx->lock_mr);
+    rdma_buffer_deregister(ctx->lock_mr);
     rdma_buffer_deregister(ctx->server_metadata_mr);
 
 
