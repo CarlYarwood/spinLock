@@ -393,7 +393,7 @@ int main(int argc, char** argv) {
 	printf("%f seconds to steup\n", ((double)(b_setup-e_setup)/CLOCKS_PER_SEC));
 
 	for (int i = 0; i < noncritical_section; i++) {
-		noop
+		noop;
 	}
     //lock
 	b_acquire = clock();
@@ -403,7 +403,7 @@ int main(int argc, char** argv) {
 	printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
     //work
 	for (int i=0; i < critical_section; i++) {
-		noop
+		noop;
 	}
     //unlock
 	b_release = clock();
