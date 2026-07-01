@@ -399,7 +399,7 @@ int main(int argc, char** argv) {
 				server_sockaddr.sin_port = htons(strtol(optarg, NULL, 0)); 
 				break;
 			case 'c':
-				crictical_section = atoi(optarg);
+				critical_section = atoi(optarg);
 				break;
 			case 'n':
 				noncritical_section = atoi(optarg);
