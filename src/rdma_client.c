@@ -71,6 +71,17 @@ void * rdma_server(void* in) {
 
 		switch (cm_event->event){
 			case RDMA_CM_EVENT_CONNECT_REQUEST :
+				struct rdma_cm_id* client_id = NULL;
+                struct rdma_conn_param conn_param;
+
+				client_id = cm_event->id;
+
+				if (rdma_ack_cm_event(cm_event)) {
+                    rdma_error("Failed to acknowledge the cm event errno: %d \n", -errno);
+                    return -errno;
+                }
+
+				
 				break;
 			case RDMA_CM_EVENT_ESTABLISHED :
 				break;
