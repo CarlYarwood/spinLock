@@ -1,6 +1,8 @@
 #include <time.h>
 #include "rdma_common.h"
 
+#define noop (void)0
+
 struct c_spin_ctx {
 	struct rdma_cm_id* client_id;
 	struct ibv_pd* pd;
@@ -340,18 +342,20 @@ int main(int argc, char** argv) {
     struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct c_spin_ctx *ctx = NULL;
-    int option;
+    int option, noncritical_section, critical_section;
 	clock_t b_setup, e_setup, b_acquire, e_acquire, b_release, e_release, b_shutdown, e_shutdown; 
 	b_setup = clock();
     node_id = calloc(1, sizeof(uint64_t));
     response = calloc(1, sizeof(uint64_t));
     *response = 1;
     *node_id = 1;
+	noncritical_section = 1;
+	cretical_section = 1;
 
     bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET;
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    while ((option = getopt(argc, argv, "a:p:")) != -1) {
+    while ((option = getopt(argc, argv, "a:p:c:n:")) != -1) {
 		switch (option) {
 			case 'a':
 				if (get_addr(optarg, (struct sockaddr*) &server_sockaddr)) {
@@ -361,6 +365,12 @@ int main(int argc, char** argv) {
 				break;
 			case 'p':
 				server_sockaddr.sin_port = htons(strtol(optarg, NULL, 0)); 
+				break;
+			case 'c':
+				critical_section = atoi(optarg);
+				break;
+			case 'n':
+				noncritical_section = atoi(optarg);
 				break;
 			default:
 				return -1;
@@ -382,6 +392,9 @@ int main(int argc, char** argv) {
 	e_setup = clock();
 	printf("%f seconds to steup\n", ((double)(b_setup-e_setup)/CLOCKS_PER_SEC));
 
+	for (int i = 0; i < noncritical_section; i++) {
+		noop
+	}
     //lock
 	b_acquire = clock();
     acquire_lock(ctx);
@@ -389,7 +402,9 @@ int main(int argc, char** argv) {
     printf("lock acquired\n");
 	printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
     //work
-
+	for (int i=0; i < critical_section; i++) {
+		noop
+	}
     //unlock
 	b_release = clock();
 	release_lock(ctx);
