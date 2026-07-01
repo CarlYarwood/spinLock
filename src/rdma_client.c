@@ -1,7 +1,87 @@
 #include <time.h>
+#include <pthread.h>
 #include "rdma_common.h"
 
 #define noop (void)0
+
+#define NEXT (0)
+#define NOTIFY (1)
+#define ID (2)
+
+struct s_mcs_node_ctx {};
+
+struct rdma_server_in {
+	struct rdma_event_channel* cm_event_channel;
+	int * keepServerUp;
+};
+
+void * rdma_server(void* in) {
+	struct sockaddr_in server_sockaddr;
+	struct rdma_cm_id *cm_server_id = NULL;
+	struct s_spin_ctx** ctx_arr;
+	struct rdma_event_channel *cm_event_channel = (rdma_server_in *) in->cm_event_channel;
+	int *keepServerUp = (rdma_server_in *) in->keepServerUp;
+	int num_conn = 0
+
+	ctx_arr = (struct s_spin_ctx**)malloc(sizeof(struct s_spin_ctx*)*MAX_CONN);
+
+    for (int i = 0; i < MAX_CONN; i++) {
+        ctx_arr[i] = NULL;
+    }
+
+	bzero(&server_sockaddr, sizeof server_sockaddr);
+	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
+	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	server_sockaddr.sin_port = htons(DEFAULT_RDMA_PORT);
+
+	if (!cm_event_channel) {
+        rdma_error("Creating cm event channel failed with errno : (%d)", -errno);
+		return NULL;
+    }
+
+	if (rdma_create_id(cm_event_channel, &cm_server_id, NULL, RDMA_PS_TCP)) {
+		rdma_error("Creating server cm id failed with errno: %d ", -errno);
+		return NULL;
+	}
+
+	if (rdma_bind_addr(cm_server_id, (struct sockaddr*) &server_sockaddr)) {
+		rdma_error("Failed to bind server address, errno: %d \n", -errno);
+		return -errno;
+	}
+
+	if (rdma_listen(cm_server_id, 8)) {
+		rdma_error("rdma_listen failed to listen on server address, errno: %d ", -errno);
+		return -errno;
+	}
+
+	do {
+        struct rdma_cm_event *cm_event = NULL;
+		struct s_mcs_node_ctx* ctx = NULL;
+
+		if (rdma_get_cm_event(cm_event_channel, &cm_event)) {
+		  rdma_error("Failed to retrieve a cm event, errno: %d \n", -errno);
+		  return -errno;
+        }
+
+        if(0 != cm_event->status){
+		    rdma_error("CM event has non zero status: %d\n", cm_event->status);
+		    rdma_ack_cm_event(cm_event);
+		    return -(cm_event->status);
+	    }
+
+		switch (cm_event->event){
+			case RDMA_CM_EVENT_CONNECT_REQUEST :
+				break;
+			case RDMA_CM_EVENT_ESTABLISHED :
+				break;
+			case RDMA_CM_EVENT_DISCONNECTED :
+				break;
+			default:
+				rdma_error("Unexpected event received: %s", rdma_event_str(cm_event->event));
+		        rdma_ack_cm_event(cm_event);
+		}
+	} while(num_conn > 0 && keepServerUp == 1)
+}
 
 struct c_spin_ctx {
 	struct rdma_cm_id* client_id;
@@ -12,8 +92,8 @@ struct c_spin_ctx {
 	struct ibv_mr* server_metadata_mr;
 	struct rdma_buffer_attr* server_metadata_attr;
 };
-uint64_t *node_id = NULL;
 uint64_t *response = NULL;
+uint64_t *node_buffer = NULL;
 
 struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id) {
 	struct c_spin_ctx *ctx = NULL;
@@ -345,10 +425,12 @@ int main(int argc, char** argv) {
     int option, noncritical_section, critical_section;
 	clock_t b_setup, e_setup, b_acquire, e_acquire, b_release, e_release, b_shutdown, e_shutdown; 
 	b_setup = clock();
-    node_id = calloc(1, sizeof(uint64_t));
+    node_buffer = calloc(3, sizeof(uint64_t));
     response = calloc(1, sizeof(uint64_t));
-    *response = 1;
-    *node_id = 1;
+	node_buffer[NEXT] = 0;
+	node_buffer[NOTIFY] = 0;
+	node_buffer[ID] = 1
+    *response = 0;
 	noncritical_section = 1;
 	critical_section = 1;
 
