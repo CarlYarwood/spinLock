@@ -380,7 +380,7 @@ int main(int argc, char** argv) {
 				lock_aquires = atoi(optarg);
 				break;
 			case 'i':
-				*node_id = strtoul(optarg);
+				*node_id = strtoul(optarg, NULL, 0);
 			default:
 				return -1;
 				break;
