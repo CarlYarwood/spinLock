@@ -153,6 +153,12 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 int clean_up_context(struct rdma_cm_id* client_id) {
     struct s_spin_ctx *ctx = (struct s_spin_ctx *)client_id->context;
     rdma_destroy_qp(client_id);
+
+    if (rdma_destroy_id(client_id)) {
+	    rdma_error("Failed to destroy client id cleanly, %d \n", -errno);
+        return -errno;
+	}
+
     if (ibv_destroy_cq(ctx->cq)) {
         rdma_error("Failed to destroy completion queue cleanly, %d \n", -errno);
         return -errno;
@@ -170,11 +176,6 @@ int clean_up_context(struct rdma_cm_id* client_id) {
         rdma_error("Failed to destroy client protection domain cleanly, %d \n", -errno);
         return -errno;
     }
-
-    if (rdma_destroy_id(client_id)) {
-	    rdma_error("Failed to destroy client id cleanly, %d \n", -errno);
-        return -errno;
-	}
     free(ctx->server_metadata_attr);
     free(ctx);
     printf("context cleaned up\n");
