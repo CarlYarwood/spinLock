@@ -155,17 +155,17 @@ int clean_up_context(struct rdma_cm_id* client_id) {
     rdma_destroy_qp(client_id);
 
     if (rdma_destroy_id(client_id)) {
-	    rdma_error("Failed to destroy client id cleanly, %d \n", -errno);
+	    printf("Failed to destroy client id cleanly, %d \n", -errno);
         return -errno;
 	}
 
     if (ibv_destroy_cq(ctx->cq)) {
-        rdma_error("Failed to destroy completion queue cleanly, %d \n", -errno);
+        printf("Failed to destroy completion queue cleanly, %d \n", -errno);
         return -errno;
     }
 
     if (ibv_destroy_comp_channel(ctx->comp)) {
-        rdma_error("Failed to destroy completion channel cleanly, %d \n", -errno);
+        printf("Failed to destroy completion channel cleanly, %d \n", -errno);
         return -errno;
     }
     rdma_buffer_deregister(ctx->lock_mr);
@@ -173,7 +173,7 @@ int clean_up_context(struct rdma_cm_id* client_id) {
 
 
     if (ibv_dealloc_pd(ctx->pd)) {
-        rdma_error("Failed to destroy client protection domain cleanly, %d \n", -errno);
+        printf("Failed to destroy client protection domain cleanly, %d \n", -errno);
         return -errno;
     }
     free(ctx->server_metadata_attr);
