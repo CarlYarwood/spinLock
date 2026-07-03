@@ -315,6 +315,7 @@ int main(int argc, char** argv) {
 
                 for(int i = 0; i<MAX_CONN ; i++) {
                     if (ctx_arr[i] == NULL) {
+                        printf("adding ctx");
                         ctx_arr[i] = ctx;
                         break;
                     }
