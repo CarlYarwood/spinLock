@@ -3,7 +3,6 @@
 #define MAX_CONN (10)
 
 struct s_spin_ctx {
-    struct node_id* id;
     struct rdma_cm_id* client_id;
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
@@ -29,6 +28,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
 
     printf("%lu\n", id->id);
 
+    client_id->context = (void *)id;
     
     ctx = (struct s_spin_ctx*)malloc(sizeof(struct s_spin_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
@@ -341,10 +341,8 @@ int main(int argc, char** argv) {
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
-                id = (struct node_id *)cm_event->param.conn.private_data;
-                printf("%lu\n", id->id);
                 printf("pre get ctx\n");
-                ctx = get_ctx_by_id(ctx_arr, id);
+                ctx = get_ctx_by_id(ctx_arr, (node_id *)(cm_event->id)->context);
                 printf("post get ctx\n");
                 if(!ctx) {
                     perror("Failed to retreive context");
