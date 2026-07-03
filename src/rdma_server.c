@@ -3,6 +3,7 @@
 #define MAX_CONN (10)
 
 struct s_spin_ctx {
+    struct node_id* id;
     struct rdma_cm_id* client_id;
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
@@ -14,7 +15,7 @@ struct s_spin_ctx {
 
 uint64_t *lock = NULL;
 
-struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
+struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struct node_id* id) {
     printf("ctx build\n");
     struct s_spin_ctx* ctx;
     struct ibv_pd* pd = NULL;
@@ -114,6 +115,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     }
 
     (*ctx).client_id = client_id;
+    (*ctx).node_id = node_id;
     (*ctx).pd = pd;
     (*ctx).comp = comp;
     (*ctx).cq = cq;  
@@ -182,18 +184,12 @@ int clean_up_context(struct s_spin_ctx* ctx) {
     return 0;
 }
 
-struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id* client_id) {
+struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id) {
     struct s_spin_ctx* ret = NULL;
-    struct sockaddr_in client_sockaddr;
 
-    memcpy(&client_sockaddr, rdma_get_peer_addr(client_id), sizeof(struct sockaddr_in));
-    char* cmp = inet_ntoa(client_sockaddr.sin_addr);
-    printf("%s\n", cmp);
     for(int i = 0; i < MAX_CONN; i++){
         if(ctx_arr[i] != NULL) {
-            struct sockaddr_in target_sockaddr;
-            memcpy(&target_sockaddr, rdma_get_peer_addr((ctx_arr[i]->client_id)), sizeof(struct sockaddr_in));
-            if(strcmp(cmp, inet_ntoa(target_sockaddr.sin_addr)) == 0){
+            if((ctx_arr[i]->id)->id == id->id){
                 ret = ctx_arr[i];
                 break;
             }
@@ -202,17 +198,12 @@ struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id*
     return ret;
 }
 
-struct s_spin_ctx* pop_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id* client_id) {
+struct s_spin_ctx* pop_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id) {
     struct s_spin_ctx* ret = NULL;
-    struct sockaddr_in client_sockaddr;
-
-    memcpy(&client_sockaddr, rdma_get_peer_addr(client_id), sizeof(struct sockaddr_in));
-    char* cmp = inet_ntoa(client_sockaddr.sin_addr);
+;
     for(int i = 0; i < MAX_CONN; i++){
         if(ctx_arr[i] != NULL) {
-            struct sockaddr_in target_sockaddr;
-            memcpy(&target_sockaddr, rdma_get_peer_addr((ctx_arr[i]->client_id)), sizeof(struct sockaddr_in));
-            if(strcmp(cmp, inet_ntoa(target_sockaddr.sin_addr)) == 0){
+            if((ctx_arr[i]->id)->id == id->id){
                 ret = ctx_arr[i];
                 ctx_arr[i] = NULL;
                 break;
@@ -301,15 +292,17 @@ int main(int argc, char** argv) {
             case RDMA_CM_EVENT_CONNECT_REQUEST :
                 struct rdma_cm_id* client_id = NULL;
                 struct rdma_conn_param conn_param;
+                struct  node_id *id = NULL;
 
                 client_id = cm_event->id;
+                id = (struct node_id *)cm_event->param.conn.private_data;
 
                 if (rdma_ack_cm_event(cm_event)) {
                     rdma_error("Failed to acknowledge the cm event errno: %d \n", -errno);
                     return -errno;
                 }
 
-                ctx = build_server_spin_context(client_id);
+                ctx = build_server_spin_context(client_id, id);
                 if(!ctx) {
                     perror("Failed to build client Context\n");
                     return -1;
@@ -317,7 +310,6 @@ int main(int argc, char** argv) {
 
                 for(int i = 0; i<MAX_CONN ; i++) {
                     if (ctx_arr[i] == NULL) {
-                        printf("adding ctx\n");
                         ctx_arr[i] = ctx;
                         break;
                     }
@@ -335,7 +327,7 @@ int main(int argc, char** argv) {
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
-                ctx = get_ctx_by_id(ctx_arr, cm_event->id);
+                ctx = get_ctx_by_id(ctx_arr, (struct node_id *)cm_event->param.conn.private_data);
                 if(!ctx) {
                     perror("Failed to retreive context");
                     return -1;
@@ -353,7 +345,7 @@ int main(int argc, char** argv) {
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
-                ctx = pop_ctx_by_id(ctx_arr, cm_event->id);
+                ctx = pop_ctx_by_id(ctx_arr, (struct node_id *)cm_event->param.conn.private_data);
                 if(ctx == NULL) {
                     perror("Failed to retreive context");
                     return -1;

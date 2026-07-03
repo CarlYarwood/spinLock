@@ -7,6 +7,10 @@
 
 #include "rdma_common.h"
 
+struct node_id {
+	uint64_t id;
+}
+
 void show_rdma_cmid(struct rdma_cm_id *id)
 {
 	if(!id){

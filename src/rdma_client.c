@@ -24,7 +24,6 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id) {
     struct ibv_mr *server_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr = NULL;
-    struct rdma_conn_param conn_param;
 	struct ibv_sge server_recv_sge;
 	struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
 
@@ -234,6 +233,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
+	struct node_id id;
 	struct rdma_conn_param conn_param;
 	struct ibv_wc wc;
 
@@ -279,11 +279,14 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 		return NULL;
 	}
 
+	id = { .id = *node_id }
 
     bzero(&conn_param, sizeof(conn_param));
 	conn_param.initiator_depth = 3;
 	conn_param.responder_resources = 3;
-	conn_param.retry_count = 3;
+	conn_param.retry_count = 3
+	conn_param.private_data = (void *) &id
+	conn_param.private_data_len = sizeof(id)
 	if (rdma_connect(ctx->client_id, &conn_param)) {
 		rdma_error("Failed to connect to remote host , errno: %d\n", -errno);
 		return NULL;
@@ -356,7 +359,7 @@ int main(int argc, char** argv) {
     bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET;
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    while ((option = getopt(argc, argv, "a:p:c:n:l:")) != -1) {
+    while ((option = getopt(argc, argv, "a:p:c:n:l:i:")) != -1) {
 		switch (option) {
 			case 'a':
 				if (get_addr(optarg, (struct sockaddr*) &server_sockaddr)) {
@@ -376,6 +379,8 @@ int main(int argc, char** argv) {
 			case 'l':
 				lock_aquires = atoi(optarg);
 				break;
+			case 'i':
+				*node_id = strtoul(optarg);
 			default:
 				return -1;
 				break;
