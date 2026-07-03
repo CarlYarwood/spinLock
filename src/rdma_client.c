@@ -287,6 +287,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	conn_param.retry_count = 3;
 	conn_param.private_data = (void *) &id;
 	conn_param.private_data_len = sizeof(id);
+	(ctx->)client_id->context = (void *)&id
 	if (rdma_connect(ctx->client_id, &conn_param)) {
 		rdma_error("Failed to connect to remote host , errno: %d\n", -errno);
 		return NULL;
