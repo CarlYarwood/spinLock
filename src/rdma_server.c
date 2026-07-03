@@ -120,7 +120,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
 }
 
 int send_server_metadata(struct rdma_cm_id* client_id) {
-    struct s_spin_ctx * ctx = (s_spin_ctx*) client_id->context;;
+    struct s_spin_ctx * ctx = (struct s_spin_ctx *) client_id->context;
     struct ibv_wc wc;
     struct ibv_sge server_send_sge;
     struct ibv_send_wr server_send_wr, *bad_server_send_wr = NULL;
@@ -151,7 +151,7 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 }
 
 int clean_up_context(struct rdma_cm_id* client_id) {
-    struct c_spin_ctx *ctx = (struct c_spin_ctx *)client_id->context;
+    struct s_spin_ctx *ctx = (struct s_spin_ctx *)client_id->context;
     rdma_destroy_qp(client_id);
 	if (rdma_destroy_id(client_id)) {
 	    rdma_error("Failed to destroy client id cleanly, %d \n", -errno);
