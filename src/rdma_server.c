@@ -338,6 +338,7 @@ int main(int argc, char** argv) {
 
             case RDMA_CM_EVENT_ESTABLISHED :
                 printf("pre get ctx\n");
+                printf("%lu\n", ((struct node *)((cm_event->id)->context))->id);
                 ctx = get_ctx_by_id(ctx_arr, (struct node_id *)(cm_event->id)->context);
                 printf("post get ctx\n");
                 if(!ctx) {
