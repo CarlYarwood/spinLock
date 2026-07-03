@@ -374,7 +374,7 @@ int main(int argc, char** argv) {
 				noncritical_section = atoi(optarg);
 				break;
 			case 'l':
-				lock_aquires = atoi(optarg)
+				lock_aquires = atoi(optarg);
 				break;
 			default:
 				return -1;
