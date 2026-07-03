@@ -186,6 +186,7 @@ struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id*
 
     memcpy(&client_sockaddr, rdma_get_peer_addr(client_id), sizeof(struct sockaddr_in));
     char* cmp = inet_ntoa(client_sockaddr.sin_addr);
+    printf(cmp);
     for(int i = 0; i < MAX_CONN; i++){
         if(ctx_arr[i] != NULL) {
             struct sockaddr_in target_sockaddr;
@@ -220,7 +221,6 @@ struct s_spin_ctx* pop_ctx_by_id(struct s_spin_ctx** ctx_arr, struct rdma_cm_id*
 }
 
 int main(int argc, char** argv) {
-    printf("say something");
     int option, num_conn = 0;
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
