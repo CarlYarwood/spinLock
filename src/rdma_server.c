@@ -116,6 +116,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     (*ctx).lock_mr = lock_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
     (*ctx).server_metadata_attr = server_metadata_attr;
+    printf("context built");
     return ctx;
 }
 
@@ -284,7 +285,6 @@ int main(int argc, char** argv) {
                 }
 
                 num_conn++;
-                printf("finished connection\n");
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
