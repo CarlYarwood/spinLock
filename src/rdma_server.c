@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
                 struct s_spin_ctx* ctx = NULL;
                 struct rdma_conn_param conn_param;
                 
-                client_id = cm_event->id
+                client_id = cm_event->id;
 
                 ctx = build_server_spin_context(client_id);
                 if(!ctx) {
