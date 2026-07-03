@@ -233,7 +233,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
-	struct node_id id;
+	struct node_id id = { .id = *node_id };;
 	struct rdma_conn_param conn_param;
 	struct ibv_wc wc;
 
@@ -279,12 +279,12 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 		return NULL;
 	}
 
-	id = { .id = *node_id };
+	
 
     bzero(&conn_param, sizeof(conn_param));
 	conn_param.initiator_depth = 3;
 	conn_param.responder_resources = 3;
-	conn_param.retry_count = 3
+	conn_param.retry_count = 3;
 	conn_param.private_data = (void *) &id;
 	conn_param.private_data_len = sizeof(id);
 	if (rdma_connect(ctx->client_id, &conn_param)) {
