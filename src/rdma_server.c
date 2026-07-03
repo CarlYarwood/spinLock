@@ -144,6 +144,8 @@ int send_server_metadata(struct s_spin_ctx* ctx) {
 	    return -errno;
     }
 
+    printf("send done\n");
+
     if (process_work_completion_events((ctx->comp), &wc, 1) != 1) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
