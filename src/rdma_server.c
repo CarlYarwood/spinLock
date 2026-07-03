@@ -196,6 +196,7 @@ struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id
 
     for(int i = 0; i < MAX_CONN; i++){
         if(ctx_arr[i] != NULL) {
+            printf("in get ctx_by_id comp");
             if((ctx_arr[i]->id)->id == id->id){
                 ret = ctx_arr[i];
                 break;
