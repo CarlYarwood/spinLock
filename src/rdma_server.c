@@ -3,7 +3,6 @@
 #define MAX_CONN (10)
 
 struct s_spin_ctx {
-    struct rdma_cm_id* client_id;
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
     struct ibv_cq* cq;
@@ -15,7 +14,6 @@ struct s_spin_ctx {
 uint64_t *lock = NULL;
 
 struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
-    printf("ctx build\n");
     struct s_spin_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -76,7 +74,6 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     qp_init_attr.recv_cq = cq;
     qp_init_attr.send_cq = cq;
 
-    printf("qp register\n");
     if (rdma_create_qp(client_id, pd, &qp_init_attr)) {
         rdma_error("Failed to create QP due to errno: %d\n", -errno);
         ibv_destroy_cq(cq);
@@ -87,7 +84,6 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         return NULL;
     }
 
-    printf("lock register \n");
     lock_mr = rdma_buffer_register(pd, lock, sizeof(*lock), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!lock_mr){
         rdma_error("Server failed to create lock memory region \n");
@@ -99,7 +95,6 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         return NULL;
     }
 
-    printf("server metadat register\n");
     (*server_metadata_attr).address = (uint64_t)lock_mr->addr;
     (*server_metadata_attr).length = (uint32_t)lock_mr->length;
     (*server_metadata_attr).stag.remote_stag = (uint32_t)lock_mr->rkey;
@@ -115,23 +110,21 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         return NULL;
     }
 
-    printf("before finalize\n");
-    (*ctx).client_id = client_id;
     (*ctx).pd = pd;
     (*ctx).comp = comp;
     (*ctx).cq = cq;  
     (*ctx).lock_mr = lock_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
     (*ctx).server_metadata_attr = server_metadata_attr;
-    printf("after finalize\n");
     return ctx;
 }
 
-int send_server_metadata(struct s_spin_ctx* ctx) {
-    printf("send metadata\n");
+int send_server_metadata(struct rdma_cm_id* client_id) {
+    struct s_spin_ctx * ctx = (s_spin_ctx*) client_id->context;;
     struct ibv_wc wc;
     struct ibv_sge server_send_sge;
     struct ibv_send_wr server_send_wr, *bad_server_send_wr = NULL;
+
 
     server_send_sge.addr = (uint64_t)(ctx->server_metadata_attr);
     server_send_sge.length = sizeof(*(ctx->server_metadata_attr));
@@ -143,7 +136,7 @@ int send_server_metadata(struct s_spin_ctx* ctx) {
     server_send_wr.opcode = IBV_WR_SEND;
     server_send_wr.send_flags = IBV_SEND_SIGNALED;
 
-    if (ibv_post_send((ctx->client_id)->qp, &server_send_wr, &bad_server_send_wr)) {
+    if (ibv_post_send(client_id->qp, &server_send_wr, &bad_server_send_wr)) {
 	    rdma_error("Posting of server metdata failed, errno: %d \n", -errno);
 	    return -errno;
     }
@@ -157,10 +150,10 @@ int send_server_metadata(struct s_spin_ctx* ctx) {
     return 0;
 }
 
-int clean_up_context(struct s_spin_ctx* ctx) {
-    printf("clean up\n");
-    rdma_destroy_qp(ctx->client_id);
-	if (rdma_destroy_id(ctx->client_id)) {
+int clean_up_context(struct rdma_cm_id* client_id) {
+    struct c_spin_ctx *ctx = (struct c_spin_ctx *)client_id->context;
+    rdma_destroy_qp(client_id);
+	if (rdma_destroy_id(client_id)) {
 	    rdma_error("Failed to destroy client id cleanly, %d \n", -errno);
         return -errno;
 	}
@@ -183,40 +176,8 @@ int clean_up_context(struct s_spin_ctx* ctx) {
         return -errno;
     }
     free(ctx->server_metadata_attr);
+    free(ctx);
     return 0;
-}
-
-struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id) {
-    printf("in_get_ctx_by_id\n");
-    printf("%lu\n", id->id);
-    printf("check");
-    struct s_spin_ctx* ret = NULL;
-
-    for(int i = 0; i < MAX_CONN; i++){
-        if(ctx_arr[i] != NULL) {
-            printf("in get ctx_by_id comp");
-            if(((struct node_id *)(ctx_arr[i]->client_id)->context)->id == id->id){
-                ret = ctx_arr[i];
-                break;
-            }
-        }
-    }
-    return ret;
-}
-
-struct s_spin_ctx* pop_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id) {
-    struct s_spin_ctx* ret = NULL;
-;
-    for(int i = 0; i < MAX_CONN; i++){
-        if(ctx_arr[i] != NULL) {
-            if(((struct node_id *)(ctx_arr[i]->client_id)->context)->id == id->id){
-                ret = ctx_arr[i];
-                ctx_arr[i] = NULL;
-                break;
-            }
-        }
-    }
-    return ret;
 }
 
 int main(int argc, char** argv) {
@@ -281,7 +242,6 @@ int main(int argc, char** argv) {
 
     do {
         struct rdma_cm_event *cm_event = NULL;
-        struct s_spin_ctx* ctx = NULL;
     
         if (rdma_get_cm_event(cm_event_channel, &cm_event)) {
 		  rdma_error("Failed to retrieve a cm event, errno: %d \n", -errno);
@@ -296,42 +256,31 @@ int main(int argc, char** argv) {
 
         switch (cm_event->event){
             case RDMA_CM_EVENT_CONNECT_REQUEST :
+                struct s_spin_ctx* ctx = NULL;
                 struct rdma_cm_id* client_id = NULL;
                 struct rdma_conn_param conn_param;
-                struct  node_id *id = NULL;
 
-                id = (struct node_id *)malloc(sizeof(struct node_id));
-
-                client_id = cm_event->id;
-                *id = *(struct node_id *)cm_event->param.conn.private_data;
-                client_id->context = (void *)id;
-
-                if (rdma_ack_cm_event(cm_event)) {
-                    rdma_error("Failed to acknowledge the cm event errno: %d \n", -errno);
-                    return -errno;
-                }
-
-                ctx = build_server_spin_context(client_id);
+                ctx = build_server_spin_context(cm_event->id);
                 if(!ctx) {
+                    rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");
                     return -1;
                 }
 
-                for(int i = 0; i<MAX_CONN ; i++) {
-                    if (ctx_arr[i] == NULL) {
-                        ctx_arr[i] = ctx;
-                        break;
-                    }
-                }
+                (cm_event->id)->context = (void *)ctx;
 
                 memset(&conn_param, 0, sizeof(conn_param));
                 conn_param.initiator_depth = 3;
                 conn_param.responder_resources = 3;
-                conn_param.private_data = (void *) id;
-                conn_param.private_data_len = sizeof(*id);
-                if (rdma_accept(ctx->client_id, &conn_param)) {
+                if (rdma_accept(cm_event->id, &conn_param)) {
+                    rdma_ack_cm_event(cm_event);
 	                rdma_error("Failed to accept the connection, errno: %d \n", -errno);
 	                return -errno;
+                }
+
+                if (rdma_ack_cm_event(cm_event)) {
+                    rdma_error("Failed to acknowledge the cm event errno: %d \n", -errno);
+                    return -errno;
                 }
 
                 num_conn++;
@@ -339,30 +288,23 @@ int main(int argc, char** argv) {
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
-                printf("pre get ctx\n");
-                printf("%lu\n", ((struct node_id *)((cm_event->id)->context))->id);
-                ctx = get_ctx_by_id(ctx_arr, (struct node_id *)(cm_event->id)->context);
-                printf("post get ctx\n");
-                if(!ctx) {
-                    perror("Failed to retreive context");
-                    return -1;
-                }
-
-                if (rdma_ack_cm_event(cm_event)) {
-		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
-		            return -errno;
-	            }
-
-                if(send_server_metadata(ctx)) {
+                if(send_server_metadata(cm_event->id) {
+                    rdma_ack_cm_event(cm_event);
                      perror("Failed to send server metadata \n");
                      return -1;
                 }
+
+                if (rdma_ack_cm_event(cm_event)) {
+		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
+		            return -errno;
+	            }
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
-                ctx = pop_ctx_by_id(ctx_arr, (struct node_id *)(cm_event->id)->context);
-                if(ctx == NULL) {
-                    perror("Failed to retreive context");
+
+                if (clean_up_context(cm_event->id)) {
+                    rdma_ack_cm_event(cm_event);
+                    perror("failed to cleanup client context");
                     return -1;
                 }
 
@@ -371,12 +313,6 @@ int main(int argc, char** argv) {
 		            return -errno;
 	            }
 
-                if (clean_up_context(ctx)) {
-                    perror("failed to cleanup client context");
-                    return -1;
-                }
-                free(ctx);
-                ctx = NULL;
                 num_conn--;
                 break;
             default:
