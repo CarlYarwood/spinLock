@@ -310,6 +310,7 @@ int main(int argc, char** argv) {
                 }
 
                 ctx = build_server_spin_context(client_id, id);
+                pritnf()
                 if(!ctx) {
                     perror("Failed to build client Context\n");
                     return -1;
@@ -331,10 +332,13 @@ int main(int argc, char** argv) {
                 }
 
                 num_conn++;
+                printf("finished connection\n");
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
+                printf("pre get ctx\n");
                 ctx = get_ctx_by_id(ctx_arr, (struct node_id *)cm_event->param.conn.private_data);
+                printf("post get ctx\n");
                 if(!ctx) {
                     perror("Failed to retreive context");
                     return -1;
