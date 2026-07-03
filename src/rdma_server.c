@@ -192,6 +192,9 @@ int clean_up_context(struct s_spin_ctx* ctx) {
 }
 
 struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id) {
+    printf("in_get_ctx_by_id\n");
+    printf("%lu\n", id->id);
+    printf("check");
     struct s_spin_ctx* ret = NULL;
 
     for(int i = 0; i < MAX_CONN; i++){
