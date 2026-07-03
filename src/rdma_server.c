@@ -121,7 +121,6 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
 
     printf("before finalize\n");
     (*ctx).client_id = client_id;
-    (*ctx).id = id;
     (*ctx).pd = pd;
     (*ctx).comp = comp;
     (*ctx).cq = cq;  
@@ -200,7 +199,7 @@ struct s_spin_ctx* get_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id
     for(int i = 0; i < MAX_CONN; i++){
         if(ctx_arr[i] != NULL) {
             printf("in get ctx_by_id comp");
-            if((ctx_arr[i]->id)->id == id->id){
+            if(((struct node_id *)(ctx_arr[i]->client_id)->context)->id == id->id){
                 ret = ctx_arr[i];
                 break;
             }
@@ -214,7 +213,7 @@ struct s_spin_ctx* pop_ctx_by_id(struct s_spin_ctx** ctx_arr, struct node_id* id
 ;
     for(int i = 0; i < MAX_CONN; i++){
         if(ctx_arr[i] != NULL) {
-            if((ctx_arr[i]->id)->id == id->id){
+            if(((struct node_id *)(ctx_arr[i]->client_id)->context)->id == id->id){
                 ret = ctx_arr[i];
                 ctx_arr[i] = NULL;
                 break;
