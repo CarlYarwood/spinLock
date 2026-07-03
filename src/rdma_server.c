@@ -115,7 +115,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
     }
 
     (*ctx).client_id = client_id;
-    (*ctx).node_id = node_id;
+    (*ctx).id = id;
     (*ctx).pd = pd;
     (*ctx).comp = comp;
     (*ctx).cq = cq;  
