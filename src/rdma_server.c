@@ -244,6 +244,7 @@ int main(int argc, char** argv) {
 
     do {
         struct rdma_cm_event *cm_event = NULL;
+        struct rdma_cm_id* client_id = NULL;
     
         if (rdma_get_cm_event(cm_event_channel, &cm_event)) {
 		  rdma_error("Failed to retrieve a cm event, errno: %d \n", -errno);
@@ -259,60 +260,61 @@ int main(int argc, char** argv) {
         switch (cm_event->event){
             case RDMA_CM_EVENT_CONNECT_REQUEST :
                 struct s_spin_ctx* ctx = NULL;
-                struct rdma_cm_id* client_id = NULL;
                 struct rdma_conn_param conn_param;
+                
+                client_id = cm_event->id
 
-                ctx = build_server_spin_context(cm_event->id);
+                ctx = build_server_spin_context(client_id);
                 if(!ctx) {
                     rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");
                     return -1;
                 }
 
-                (cm_event->id)->context = (void *)ctx;
-
-                memset(&conn_param, 0, sizeof(conn_param));
-                conn_param.initiator_depth = 3;
-                conn_param.responder_resources = 3;
-                if (rdma_accept(cm_event->id, &conn_param)) {
-                    rdma_ack_cm_event(cm_event);
-	                rdma_error("Failed to accept the connection, errno: %d \n", -errno);
-	                return -errno;
-                }
+                (client_id)->context = (void *)ctx;
 
                 if (rdma_ack_cm_event(cm_event)) {
                     rdma_error("Failed to acknowledge the cm event errno: %d \n", -errno);
                     return -errno;
                 }
 
+                memset(&conn_param, 0, sizeof(conn_param));
+                conn_param.initiator_depth = 3;
+                conn_param.responder_resources = 3;
+                if (rdma_accept(client_id, &conn_param)) {
+	                rdma_error("Failed to accept the connection, errno: %d \n", -errno);
+	                return -errno;
+                }
+
                 num_conn++;
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
-                if(send_server_metadata(cm_event->id)) {
-                    rdma_ack_cm_event(cm_event);
+                client_id = cm_event->id;
+
+                if (rdma_ack_cm_event(cm_event)) {
+		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
+		            return -errno;
+	            }
+
+                if(send_server_metadata(client_id)) {
                      perror("Failed to send server metadata \n");
                      return -1;
                 }
-
-                if (rdma_ack_cm_event(cm_event)) {
-		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
-		            return -errno;
-	            }
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
-
-                if (clean_up_context(cm_event->id)) {
-                    rdma_ack_cm_event(cm_event);
-                    perror("failed to cleanup client context");
-                    return -1;
-                }
+                client_id = cm_event->id;
 
                 if (rdma_ack_cm_event(cm_event)) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return -errno;
 	            }
+
+                if (clean_up_context(client_id)) {
+                    perror("failed to cleanup client context");
+                    return -1;
+                }
 
                 num_conn--;
                 break;
