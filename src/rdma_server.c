@@ -329,7 +329,7 @@ int main(int argc, char** argv) {
                 memset(&conn_param, 0, sizeof(conn_param));
                 conn_param.initiator_depth = 3;
                 conn_param.responder_resources = 3;
-                conn_param.private_data = *id;
+                conn_param.private_data = (void *) id;
                 conn_param.private_data_len = sizeof(*id);
                 if (rdma_accept(ctx->client_id, &conn_param)) {
 	                rdma_error("Failed to accept the connection, errno: %d \n", -errno);
