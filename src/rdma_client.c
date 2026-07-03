@@ -381,6 +381,7 @@ int main(int argc, char** argv) {
 				break;
 			case 'i':
 				*node_id = strtoul(optarg, NULL, 0);
+				break;
 			default:
 				return -1;
 				break;
