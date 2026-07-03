@@ -310,7 +310,6 @@ int main(int argc, char** argv) {
                 }
 
                 ctx = build_server_spin_context(client_id, id);
-                pritnf()
                 if(!ctx) {
                     perror("Failed to build client Context\n");
                     return -1;
