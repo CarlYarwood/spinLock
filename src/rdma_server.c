@@ -288,7 +288,7 @@ int main(int argc, char** argv) {
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
-                if(send_server_metadata(cm_event->id) {
+                if(send_server_metadata(cm_event->id)) {
                     rdma_ack_cm_event(cm_event);
                      perror("Failed to send server metadata \n");
                      return -1;
