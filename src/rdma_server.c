@@ -27,7 +27,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
     struct rdma_buffer_attr *server_metadata_attr;
     struct rdma_conn_param conn_param;
 
-    printf("%d\n", id->id);
+    printf("%lu\n", id->id);
 
     
     ctx = (struct s_spin_ctx*)malloc(sizeof(struct s_spin_ctx));
