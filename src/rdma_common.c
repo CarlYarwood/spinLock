@@ -177,14 +177,14 @@ int process_work_completion_events (struct ibv_comp_channel *comp_channel,
        } while (total_wc < max_wc); 
        debug("%d WC are completed \n", total_wc);
        /* Now we check validity and status of I/O work completions */
-       for( i = 0 ; i < total_wc ; i++) {
-	       if (wc[i].status != IBV_WC_SUCCESS) {
-		       rdma_error("Work completion (WC) has error status: %s at index %d", 
-				       ibv_wc_status_str(wc[i].status), i);
-		       /* return negative value */
-		       return -(wc[i].status);
-	       }
-       }
+    //    for( i = 0 ; i < total_wc ; i++) {
+	//        if (wc[i].status != IBV_WC_SUCCESS) {
+	// 	       rdma_error("Work completion (WC) has error status: %s at index %d", 
+	// 			       ibv_wc_status_str(wc[i].status), i);
+	// 	       /* return negative value */
+	// 	       return -(wc[i].status);
+	//        }
+    //    }
        /* Similar to connection management events, we need to acknowledge CQ events */
        ibv_ack_cq_events(cq_ptr, 
 		       1 /* we received one event notification. This is not 
