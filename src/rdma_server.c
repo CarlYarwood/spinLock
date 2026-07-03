@@ -343,11 +343,10 @@ int main(int argc, char** argv) {
 		            return -errno;
 	            }
 
-                while(send_server_metadata(ctx) != 0) {}
-                // if(send_server_metadata(ctx)) {
-                //     perror("Failed to send server metadata \n");
-                //     return -1;
-                // }
+                if(send_server_metadata(ctx)) {
+                     perror("Failed to send server metadata \n");
+                     return -1;
+                }
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
@@ -368,7 +367,6 @@ int main(int argc, char** argv) {
                 }
                 free(ctx);
                 ctx = NULL;
-
                 num_conn--;
                 break;
             default:
