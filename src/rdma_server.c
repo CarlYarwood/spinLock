@@ -1,7 +1,5 @@
 #include "rdma_common.h"
 
-#define MAX_CONN (10)
-
 struct s_spin_ctx {
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
@@ -187,13 +185,6 @@ int main(int argc, char** argv) {
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
-    struct s_spin_ctx** ctx_arr;
-
-    ctx_arr = (struct s_spin_ctx**)malloc(sizeof(struct s_spin_ctx*)*MAX_CONN);
-
-    for (int i = 0; i < MAX_CONN; i++) {
-        ctx_arr[i] = NULL;
-    }
 
     lock = calloc(1, sizeof(uint64_t));
     *lock = 0;
