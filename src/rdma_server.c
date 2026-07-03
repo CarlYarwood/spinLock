@@ -341,7 +341,7 @@ int main(int argc, char** argv) {
             case RDMA_CM_EVENT_ESTABLISHED :
                 id = (struct node_id *)cm_event->param.conn.private_data;
                 printf("pre get ctx\n");
-                ctx = get_ctx_by_id(ctx_arr, (id);
+                ctx = get_ctx_by_id(ctx_arr, id);
                 printf("post get ctx\n");
                 if(!ctx) {
                     perror("Failed to retreive context");
