@@ -14,7 +14,7 @@ struct s_spin_ctx {
 
 uint64_t *lock = NULL;
 
-struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struct node_id* id) {
+struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     printf("ctx build\n");
     struct s_spin_ctx* ctx;
     struct ibv_pd* pd = NULL;
@@ -25,10 +25,6 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr;
     struct rdma_conn_param conn_param;
-
-    printf("%lu\n", id->id);
-
-    client_id->context = (void *)id;
     
     ctx = (struct s_spin_ctx*)malloc(sizeof(struct s_spin_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
@@ -306,13 +302,14 @@ int main(int argc, char** argv) {
 
                 client_id = cm_event->id;
                 id = (struct node_id *)cm_event->param.conn.private_data;
+                client_id->context = (void *)id;
 
                 if (rdma_ack_cm_event(cm_event)) {
                     rdma_error("Failed to acknowledge the cm event errno: %d \n", -errno);
                     return -errno;
                 }
 
-                ctx = build_server_spin_context(client_id, id);
+                ctx = build_server_spin_context(client_id);
                 if(!ctx) {
                     perror("Failed to build client Context\n");
                     return -1;
