@@ -282,7 +282,6 @@ int main(int argc, char** argv) {
     do {
         struct rdma_cm_event *cm_event = NULL;
         struct s_spin_ctx* ctx = NULL;
-        struct  node_id *id = NULL;
     
         if (rdma_get_cm_event(cm_event_channel, &cm_event)) {
 		  rdma_error("Failed to retrieve a cm event, errno: %d \n", -errno);
@@ -299,9 +298,12 @@ int main(int argc, char** argv) {
             case RDMA_CM_EVENT_CONNECT_REQUEST :
                 struct rdma_cm_id* client_id = NULL;
                 struct rdma_conn_param conn_param;
+                struct  node_id *id = NULL;
+
+                id = (struct node_id *)malloc(sizeof(struct node_id));
 
                 client_id = cm_event->id;
-                id = (struct node_id *)cm_event->param.conn.private_data;
+                *id = *(struct node_id *)cm_event->param.conn.private_data;
                 client_id->context = (void *)id;
 
                 if (rdma_ack_cm_event(cm_event)) {
@@ -358,8 +360,7 @@ int main(int argc, char** argv) {
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
-                id = (struct node_id *)cm_event->param.conn.private_data;
-                ctx = pop_ctx_by_id(ctx_arr, id);
+                ctx = pop_ctx_by_id(ctx_arr, (struct node_id *)(cm_event->id)->context);
                 if(ctx == NULL) {
                     perror("Failed to retreive context");
                     return -1;
