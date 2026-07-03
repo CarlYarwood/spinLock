@@ -141,12 +141,11 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 	    return -errno;
     }
 
-    printf("send done\n");
-
     if (process_work_completion_events((ctx->comp), &wc, 1) != 1) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
     }
+    printf("metadata sent");
     return 0;
 }
 
@@ -177,6 +176,7 @@ int clean_up_context(struct rdma_cm_id* client_id) {
     }
     free(ctx->server_metadata_attr);
     free(ctx);
+    printf("clean up");
     return 0;
 }
 
