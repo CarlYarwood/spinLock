@@ -114,6 +114,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
         return NULL;
     }
 
+    printf("before finalize");
     (*ctx).client_id = client_id;
     (*ctx).id = id;
     (*ctx).pd = pd;
@@ -122,6 +123,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
     (*ctx).lock_mr = lock_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
     (*ctx).server_metadata_attr = server_metadata_attr;
+    printf("after finalize");
     return ctx;
 }
 
