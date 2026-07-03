@@ -342,7 +342,7 @@ int main(int argc, char** argv) {
     struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct c_spin_ctx *ctx = NULL;
-    int option, noncritical_section, critical_section;
+    int option, noncritical_section, critical_section, lock_aquires;
 	clock_t b_setup, e_setup, b_acquire, e_acquire, b_release, e_release, b_shutdown, e_shutdown; 
 	b_setup = clock();
     node_id = calloc(1, sizeof(uint64_t));
@@ -351,11 +351,12 @@ int main(int argc, char** argv) {
     *node_id = 1;
 	noncritical_section = 1;
 	critical_section = 1;
+	lock_aquires = 1;
 
     bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET;
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    while ((option = getopt(argc, argv, "a:p:c:n:")) != -1) {
+    while ((option = getopt(argc, argv, "a:p:c:n:l:")) != -1) {
 		switch (option) {
 			case 'a':
 				if (get_addr(optarg, (struct sockaddr*) &server_sockaddr)) {
@@ -371,6 +372,9 @@ int main(int argc, char** argv) {
 				break;
 			case 'n':
 				noncritical_section = atoi(optarg);
+				break;
+			case 'l':
+				lock_aquires = atoi(optarg)
 				break;
 			default:
 				return -1;
@@ -392,26 +396,27 @@ int main(int argc, char** argv) {
 	e_setup = clock();
 	printf("%f seconds to steup\n", ((double)(b_setup-e_setup)/CLOCKS_PER_SEC));
 
-	for (int i = 0; i < noncritical_section; i++) {
-		noop;
-	}
-    //lock
-	b_acquire = clock();
-    acquire_lock(ctx);
-	e_acquire = clock();
-    printf("lock acquired\n");
-	printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
-    //work
-	for (int i=0; i < critical_section; i++) {
-		noop;
-	}
-    //unlock
-	b_release = clock();
-	release_lock(ctx);
-	e_release = clock();
+	for (int i = 0; i < lock_aquires; i++) {
+		for (int i = 0; i < noncritical_section; i++) {
+			noop;
+		}
+		//lock
+		b_acquire = clock();
+		acquire_lock(ctx);
+		e_acquire = clock();
+		printf("lock acquired\n");
+		printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
+		//work
+		for (int i=0; i < critical_section; i++) {
+			noop;
+		}
+		//unlock
+		b_release = clock();
+		release_lock(ctx);
+		e_release = clock();
 
-	printf("%f seconds to release\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
-
+		printf("%f seconds to release\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
+	}
 
 	b_shutdown = clock();
 	disconnect_from_server(cm_event_channel, ctx);	
