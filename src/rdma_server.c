@@ -27,6 +27,8 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
     struct rdma_buffer_attr *server_metadata_attr;
     struct rdma_conn_param conn_param;
 
+    printf("%d\n", id->id);
+
     
     ctx = (struct s_spin_ctx*)malloc(sizeof(struct s_spin_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
@@ -78,6 +80,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
     qp_init_attr.recv_cq = cq;
     qp_init_attr.send_cq = cq;
 
+    printf("qp register\n");
     if (rdma_create_qp(client_id, pd, &qp_init_attr)) {
         rdma_error("Failed to create QP due to errno: %d\n", -errno);
         ibv_destroy_cq(cq);
@@ -88,6 +91,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
         return NULL;
     }
 
+    printf("lock register \n");
     lock_mr = rdma_buffer_register(pd, lock, sizeof(*lock), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!lock_mr){
         rdma_error("Server failed to create lock memory region \n");
@@ -99,6 +103,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
         return NULL;
     }
 
+    printf("server metadat register\n");
     (*server_metadata_attr).address = (uint64_t)lock_mr->addr;
     (*server_metadata_attr).length = (uint32_t)lock_mr->length;
     (*server_metadata_attr).stag.remote_stag = (uint32_t)lock_mr->rkey;
@@ -114,7 +119,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
         return NULL;
     }
 
-    printf("before finalize");
+    printf("before finalize\n");
     (*ctx).client_id = client_id;
     (*ctx).id = id;
     (*ctx).pd = pd;
@@ -123,7 +128,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id, struc
     (*ctx).lock_mr = lock_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
     (*ctx).server_metadata_attr = server_metadata_attr;
-    printf("after finalize");
+    printf("after finalize\n");
     return ctx;
 }
 
