@@ -26,7 +26,7 @@ struct c_spin_ctx {
 	struct rdma_buffer_attr* server_metadata_attr;
 };
 
-struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *node_id, uint64_t *response) {
+struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *response) {
 	struct c_spin_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -240,7 +240,7 @@ int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) 
 	return 0;
 }
 
-struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *node_id , uint64_t *response) {
+struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response) {
 	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -273,7 +273,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_spin_context(cm_client_id, node_id, response);
+	ctx = build_client_spin_context(cm_client_id, response);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
