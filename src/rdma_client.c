@@ -404,8 +404,10 @@ int main(int argc, char** argv) {
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
+	printf("start");
 	out_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
 	pthread_mutex_init(out_lock, NULL);
+	printf("mutex allocated");
 	noncritical_section = 1;
 	critical_section = 1;
 	num_aquire = 1;
