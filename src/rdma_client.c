@@ -10,13 +10,12 @@ pthread_mutex_t *event_manager_lock = NULL;
 struct rdma_client_in {
 	struct rdma_event_channel *cm_event_channel;
 	struct sockaddr_in server_sockaddr;
-	uint64_t node_id;
 	int critical_section;
 	int noncritical_section;
 	int num_aquire;
 };
 
-struct c_spin_ctx {
+struct c_ticket_ctx {
 	struct rdma_cm_id* client_id;
 	struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
@@ -26,8 +25,8 @@ struct c_spin_ctx {
 	struct rdma_buffer_attr* server_metadata_attr;
 };
 
-struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *node_id, uint64_t *response) {
-	struct c_spin_ctx *ctx = NULL;
+struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, uint64_t *response) {
+	struct c_ticket_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
@@ -38,7 +37,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	struct ibv_sge server_recv_sge;
 	struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
 
-	ctx = (struct c_spin_ctx*)malloc(sizeof(struct c_spin_ctx));
+	ctx = (struct c_ticket_ctx*)malloc(sizeof(struct c_ticket_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
 
 	pd = ibv_alloc_pd(client_id->verbs);
@@ -153,7 +152,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	return ctx;
 }
 
-int destroy_context(struct c_spin_ctx* ctx){
+int destroy_context(struct c_ticket_ctx* ctx){
 	int ret = 0;
 	rdma_destroy_qp(ctx->client_id);
 
@@ -190,24 +189,23 @@ int destroy_context(struct c_spin_ctx* ctx){
 
 
 
-int copmare_and_swap(struct c_spin_ctx* ctx, uint64_t cmp, uint64_t swap) {
-    uint64_t ret = -1;
+int fetch_and_add(struct c_ticket_ctx* ctx, int offset) {
+    int ret = -1;
     struct ibv_send_wr cas_wr, *bad_cas_wr = NULL;
     struct ibv_wc cas_wc;
     struct ibv_sge cas_sge;
 
     cas_sge.addr = (uint64_t) (ctx->response_mr)->addr;
     cas_sge.length = (uint64_t) (ctx->response_mr)->length;
-    cas_sge.lkey = (uint64_t)(ctx->response_mr)->lkey;
+    cas_sge.lkey = (uint64_t) (ctx->response_mr)->lkey;
     
     bzero(&cas_wr, sizeof(cas_wr));
     cas_wr.sg_list = &cas_sge;
     cas_wr.num_sge = 1;
-    cas_wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
+    cas_wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
     cas_wr.wr.atomic.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
-    cas_wr.wr.atomic.remote_addr = (ctx->server_metadata_attr)->address;
-    cas_wr.wr.atomic.compare_add = cmp;
-    cas_wr.wr.atomic.swap = swap;
+    cas_wr.wr.atomic.remote_addr = (ctx->server_metadata_attr)->address + sizeof(uint64_t) * offset;
+    cas_wr.wr.atomic.compare_add = 1;
     cas_wr.send_flags = IBV_SEND_SIGNALED;
 
     ret = ibv_post_send((ctx->client_id)->qp, &cas_wr, &bad_cas_wr);
@@ -215,33 +213,74 @@ int copmare_and_swap(struct c_spin_ctx* ctx, uint64_t cmp, uint64_t swap) {
         perror("Failed to send cas\n");
         return 1;
     }
-
-    if (process_work_completion_events(ctx->comp, &cas_wc, 1) != 1) {
+    ret = process_work_completion_events(ctx->comp, &cas_wc, 1);
+    if (ret != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
     }
     return 0;
 }
 
-int acquire_lock(struct c_spin_ctx * ctx,uint64_t *node_id, uint64_t *response) {
-	do {
-        copmare_and_swap(ctx, 0, *node_id);
-    } while(*response != 0);
-	return 0;
+int rdma_read(struct c_ticket_ctx *ctx, int offset) {
+	int ret = -1;
+    struct ibv_send_wr read_wr, *bad_read_wr = NULL;
+    struct ibv_wc read_wc;
+    struct ibv_sge read_sge;
+
+    read_sge.addr = (uint64_t) (ctx->response_mr)->addr;
+    read_sge.length = (uint64_t) (ctx->response_mr)->length;
+    read_sge.lkey = (uint64_t)(ctx->response_mr)->lkey;
+
+	bzero(&read_wr, sizeof(read_wr));
+    read_wr.sg_list = &read_sge;
+    read_wr.num_sge = 1;
+    read_wr.opcode = IBV_WR_RDMA_READ;
+	read_wr.send_flags = IBV_SEND_SIGNALED;
+
+	read_wr.wr.rdma.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
+    read_wr.wr.rdma.remote_addr = (ctx->server_metadata_attr)->address + sizeof(uint64_t) * offset;
+
+	ret = ibv_post_send((ctx->client_id)->qp, &read_wr, &bad_read_wr);
+    if(ret) {
+        perror("Failed to send read\n");
+        return 1;
+    }
+    ret = process_work_completion_events(ctx->comp, &read_wc, 1);
+    if (ret != 1) {
+        perror("We failed to get 1 work completions\n");
+        return 1;
+    }
+    return 0;
+
 }
 
-int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) {
-	copmare_and_swap(ctx, *node_id, 0);
-    if(*response != *node_id) {
-        perror("lock release failed\n");
+uint64_t acquire_lock(struct c_ticket_ctx*  ctx, uint64_t *response) {
+	int test = 1;
+	uint64_t ticket;
+	do {
+		test = fetch_and_add(ctx, NEXT);
+	} while(test != 0);
+	ticket = *response;
+	do {
+		if(rdma_read(ctx, NOW) != 0) {
+			printf("read fail\n");
+		}
+	} while(ticket != *response);
+
+	return ticket;
+}
+
+int release_lock(struct c_ticket_ctx* ctx, uint64_t ticket, uint64_t *response) {
+	fetch_and_add(ctx, NOW);
+    if(*response != ticket) {
+        perror("de-latch failed\n");
         return -1;
     }
-    // printf("lock release successful\n");
+    printf("de-latch successful\n");
 	return 0;
 }
-
-struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *node_id , uint64_t *response) {
-	struct c_spin_ctx *ctx = NULL;
+struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response) {
+	struct c_ticket_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
 	struct rdma_conn_param conn_param;
@@ -273,7 +312,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_spin_context(cm_client_id, node_id, response);
+	ctx = build_client_ticket_context(cm_client_id, response);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
@@ -320,7 +359,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	return ctx;
 }
 
-int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c_spin_ctx* ctx){
+int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c_ticket_ctx* ctx){
 	struct rdma_cm_event *cm_event = NULL;
 	int ret = 0;
 	if (rdma_disconnect(ctx->client_id)) {
@@ -350,7 +389,7 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 }
 
 void * rdma_client(void * in) {
-	struct c_spin_ctx *ctx = NULL;
+	struct c_ticket_ctx *ctx = NULL;
 	struct rdma_event_channel *cm_event_channel = ((struct rdma_client_in *) in)->cm_event_channel;
 	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
@@ -363,17 +402,18 @@ void * rdma_client(void * in) {
 	*node_id = ((struct rdma_client_in *) in)->node_id;
 	
 	pthread_mutex_lock(event_manager_lock);
-	ctx = connect_to_server(cm_event_channel, &server_sockaddr, node_id, response);
+	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response);
 	pthread_mutex_unlock(event_manager_lock);
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
+		uint64_t ticket;
 		for (int i = 0; i < noncritical_section; i++) {
 			noop;
 		}
 		//lock
 		// b_acquire = clock();
-		acquire_lock(ctx, node_id, response);
+		ticket acquire_lock(ctx, response);
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
@@ -382,7 +422,7 @@ void * rdma_client(void * in) {
 		}
 		//unlock
 		// b_release = clock();
-		release_lock(ctx, node_id, response);
+		release_lock(ctx, ticket, response);
 		// e_release = clock();
 
 		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
@@ -393,7 +433,6 @@ void * rdma_client(void * in) {
 	disconnect_from_server(cm_event_channel, ctx);
 	pthread_mutex_unlock(event_manager_lock);
 	/* We free the buffers */
-	free(node_id);
 	free(response);
 
 	pthread_mutex_lock(out_lock);
@@ -407,7 +446,6 @@ int main(int argc, char** argv) {
 	struct rdma_client_in *in = NULL;
 	struct sockaddr_in server_sockaddr;
     int option, noncritical_section, critical_section, num_aquire, num_threads;
-	uint64_t id;
 	pthread_t *clients = NULL;
 	event_manager_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
 	out_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
@@ -416,12 +454,11 @@ int main(int argc, char** argv) {
 	critical_section = 1;
 	num_aquire = 1;
 	num_threads = 1;
-	id = 1;
 
     bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET;
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    while ((option = getopt(argc, argv, "a:p:c:n:l:i:t:")) != -1) {
+    while ((option = getopt(argc, argv, "a:p:c:n:l:t:")) != -1) {
 		switch (option) {
 			case 'a':
 				if (get_addr(optarg, (struct sockaddr*) &server_sockaddr)) {
@@ -440,9 +477,6 @@ int main(int argc, char** argv) {
 				break;
 			case 'l':
 				num_aquire = atoi(optarg);
-				break;
-			case 'i':
-				id = strtoul(optarg, NULL, 0);
 				break;
 			case 't':
 				num_threads = atoi(optarg);
@@ -468,12 +502,10 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < num_threads; i++) {
 		(&in[i])->cm_event_channel = cm_event_channel;
 		(&in[i])->server_sockaddr = server_sockaddr;
-		(&in[i])->node_id = id;
 		(&in[i])->critical_section = critical_section;
 		(&in[i])->noncritical_section = noncritical_section;
 		(&in[i])->num_aquire = num_aquire;
 		pthread_create(&clients[i], NULL, rdma_client, (void *) &in[i]);
-		id++;
 	}
 
 	for(int i = 0; i < num_threads; i++) {
