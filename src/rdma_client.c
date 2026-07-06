@@ -456,8 +456,10 @@ int main(int argc, char** argv) {
 		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
 		return -errno;
 	}
+	printf("before thread and in alloc");
 	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
 	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
+	printf("after thread and in alloc");
 
 	for (int i = 0; i < num_threads; i++) {
 		printf("in loop");
