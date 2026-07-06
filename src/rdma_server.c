@@ -16,7 +16,7 @@ struct s_ticket_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
-    struct ibv_mr *lock_mr = NULL;
+    struct ibv_mr *ticket_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr;
