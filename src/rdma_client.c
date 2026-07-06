@@ -456,8 +456,8 @@ int main(int argc, char** argv) {
 		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
 		return -errno;
 	}
-	clients = malloc(sizeof(pthread_t) * num_threads);
-	in = malloc(sizeof(struct rdma_client_in) * num_threads);
+	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
+	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
 
 	for (int i = 0; i<num_threads; i++) {
 		(&in[i])->cm_event_channel = cm_event_channel;
@@ -471,7 +471,7 @@ int main(int argc, char** argv) {
 	}
 
 	for(int i = 0; i < num_threads; i++) {
-		pthread_join(clients[i], NULL);
+		pthread_join(&clients[i], NULL);
 	}
 	pthread_mutex_destroy(out_lock);
 	free(in);
