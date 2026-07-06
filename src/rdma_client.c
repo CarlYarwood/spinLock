@@ -350,7 +350,7 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 
 void * rdma_client(void * in) {
 	struct c_spin_ctx *ctx = NULL;
-	struct rdma_event_channel *cm_event_channel = ((struct rdma_client_in *) in)->cm_event_channel
+	struct rdma_event_channel *cm_event_channel = ((struct rdma_client_in *) in)->cm_event_channel;
 	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
 	uint64_t *node_id = calloc(1, sizeof(uint64_t));
@@ -359,7 +359,6 @@ void * rdma_client(void * in) {
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
-	pthread_mutex_t out_lock = ((struct rdma_client_in *) in)->out_lock;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
 
 	ctx = connect_to_server(cm_event_channel, &server_sockaddr, node_id, response);
@@ -392,8 +391,8 @@ void * rdma_client(void * in) {
 	free(node_id);
 	free(response);
 
-	pthread_mutext_lock(out_lock);
-	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC))
+	pthread_mutex_lock(out_lock);
+	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
 	pthread_mutex_unlock(out_lock);
 	return NULL;
 }
@@ -401,6 +400,7 @@ void * rdma_client(void * in) {
 int main(int argc, char** argv) {
     struct rdma_event_channel *cm_event_channel = NULL;
 	struct rdma_client_in *in = NULL;
+	struct sockaddr_in server_sockaddr;
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
@@ -481,6 +481,5 @@ int main(int argc, char** argv) {
 	
 	rdma_destroy_event_channel(cm_event_channel);
 	printf("Client resource clean up is complete \n");
-	printf("%f seconds to shutdown\n", (num_ops/((start - end) / CLOCKS_PER_SEC)));
 	return 0;
 }
