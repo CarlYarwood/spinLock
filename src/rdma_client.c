@@ -1,7 +1,19 @@
 #include <time.h>
+#include <pthread.h>
 #include "rdma_common.h"
 
 #define noop (void)0
+
+pthread_mutex_t *out_lock = NULL;
+
+struct rdma_client_in {
+	struct rdma_event_channel *cm_event_channel;
+	struct sockaddr_in server_sockaddr;
+	uint64_t node_id;
+	int critical_section;
+	int noncritical_section;
+	int num_aquire;
+};
 
 struct c_spin_ctx {
 	struct rdma_cm_id* client_id;
@@ -12,10 +24,8 @@ struct c_spin_ctx {
 	struct ibv_mr* server_metadata_mr;
 	struct rdma_buffer_attr* server_metadata_attr;
 };
-uint64_t *node_id = NULL;
-uint64_t *response = NULL;
 
-struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id) {
+struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *node_id, uint64_t *response) {
 	struct c_spin_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -212,14 +222,14 @@ int copmare_and_swap(struct c_spin_ctx* ctx, uint64_t cmp, uint64_t swap) {
     return 0;
 }
 
-int acquire_lock(struct c_spin_ctx * ctx) {
+int acquire_lock(struct c_spin_ctx * ctx,uint64_t *node_id, uint64_t *response) {
 	do {
         copmare_and_swap(ctx, 0, *node_id);
     } while(*response != 0);
 	return 0;
 }
 
-int release_lock(struct c_spin_ctx *ctx) {
+int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) {
 	copmare_and_swap(ctx, *node_id, 0);
     if(*response != *node_id) {
         perror("lock release failed\n");
@@ -229,7 +239,7 @@ int release_lock(struct c_spin_ctx *ctx) {
 	return 0;
 }
 
-struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr) {
+struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *node_id , uint64_t *response) {
 	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -262,7 +272,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_spin_context(cm_client_id);
+	ctx = build_client_spin_context(cm_client_id, node_id, response);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
@@ -338,25 +348,74 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 	return ret;
 }
 
+void * rdma_client(void * in) {
+	struct c_spin_ctx *ctx = NULL;
+	struct rdma_event_channel *cm_event_channel = ((struct rdma_client_in *) in)->cm_event_channel
+	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
+	uint64_t *response = calloc(1, sizeof(uint64_t));
+	uint64_t *node_id = calloc(1, sizeof(uint64_t));
+	int critical_section = ((struct rdma_client_in *) in)->critical_section;
+	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
+	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
+	// clock_t b_acquire, e_acquire, b_release, e_release;
+	clock_t start, end;
+	pthread_mutex_t out_lock = ((struct rdma_client_in *) in)->out_lock;
+	*node_id = ((struct rdma_client_in *) in)->node_id;
+
+	ctx = connect_to_server(cm_event_channel, &server_sockaddr, node_id, response);
+	start = clock();
+
+	for (int i = 0; i < num_aquire; i++) {
+		for (int i = 0; i < noncritical_section; i++) {
+			noop;
+		}
+		//lock
+		// b_acquire = clock();
+		acquire_lock(ctx, node_id, response);
+		// e_acquire = clock();
+		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
+		//work
+		for (int i=0; i < critical_section; i++) {
+			noop;
+		}
+		//unlock
+		// b_release = clock();
+		release_lock(ctx, node_id, response);
+		// e_release = clock();
+
+		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
+	}
+	end = clock();
+
+	disconnect_from_server(cm_event_channel, ctx);	
+	/* We free the buffers */
+	free(node_id);
+	free(response);
+
+	pthread_mutext_lock(out_lock);
+	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC))
+	pthread_mutex_unlock(out_lock);
+	return NULL;
+}
+
 int main(int argc, char** argv) {
-    struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
-    struct c_spin_ctx *ctx = NULL;
-    int option, noncritical_section, critical_section, lock_aquires;
-	clock_t b_setup, e_setup, b_acquire, e_acquire, b_release, e_release, b_shutdown, e_shutdown; 
-	b_setup = clock();
-    node_id = calloc(1, sizeof(uint64_t));
-    response = calloc(1, sizeof(uint64_t));
-    *response = 1;
-    *node_id = 1;
+	struct rdma_client_in *in = NULL;
+    int option, noncritical_section, critical_section, num_aquire, num_threads;
+	uint64_t id;
+	pthread_t *clients = NULL;
+	out_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+	pthread_mutex_init(out_lock, NULL);
 	noncritical_section = 1;
 	critical_section = 1;
-	lock_aquires = 1;
+	num_aquire = 1;
+	num_threads = 1;
+	id = 1;
 
     bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET;
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    while ((option = getopt(argc, argv, "a:p:c:n:l:i:")) != -1) {
+    while ((option = getopt(argc, argv, "a:p:c:n:l:i:t:")) != -1) {
 		switch (option) {
 			case 'a':
 				if (get_addr(optarg, (struct sockaddr*) &server_sockaddr)) {
@@ -374,10 +433,13 @@ int main(int argc, char** argv) {
 				noncritical_section = atoi(optarg);
 				break;
 			case 'l':
-				lock_aquires = atoi(optarg);
+				num_aquire = atoi(optarg);
 				break;
 			case 'i':
-				*node_id = strtoul(optarg, NULL, 0);
+				id = strtoul(optarg, NULL, 0);
+				break;
+			case 't':
+				num_threads = atoi(optarg);
 				break;
 			default:
 				return -1;
@@ -394,44 +456,31 @@ int main(int argc, char** argv) {
 		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
 		return -errno;
 	}
+	clients = malloc(sizeof(pthread_t) * num_threads);
+	in = malloc(sizeof(struct rdma_client_in) * num_threads);
 
-    ctx = connect_to_server(cm_event_channel, &server_sockaddr);
-	e_setup = clock();
-	printf("%f seconds to steup\n", ((double)(b_setup-e_setup)/CLOCKS_PER_SEC));
-
-	for (int i = 0; i < lock_aquires; i++) {
-		for (int i = 0; i < noncritical_section; i++) {
-			noop;
-		}
-		//lock
-		b_acquire = clock();
-		acquire_lock(ctx);
-		e_acquire = clock();
-		printf("lock acquired\n");
-		printf("%f seconds to aquire\n", ((double)(b_acquire-e_acquire)/CLOCKS_PER_SEC));
-		//work
-		for (int i=0; i < critical_section; i++) {
-			noop;
-		}
-		//unlock
-		b_release = clock();
-		release_lock(ctx);
-		e_release = clock();
-
-		printf("%f seconds to release\n", ((double)(b_release-e_release)/CLOCKS_PER_SEC));
+	for (int i = 0; i<num_threads; i++) {
+		(&in[i])->cm_event_channel = cm_event_channel;
+		(&in[i])->server_sockaddr = server_sockaddr;
+		(&in[i])->node_id = id;
+		(&in[i])->critical_section = critical_section;
+		(&in[i])->noncritical_section = noncritical_section;
+		(&in[i])->num_aquire = num_aquire;
+		pthread_create(&clients[i], NULL, rdma_client, (void *) &in[i]);
+		id++;
 	}
 
-	b_shutdown = clock();
-	disconnect_from_server(cm_event_channel, ctx);	
-	/* We free the buffers */
-	free(node_id);
-	free(response);
-
+	for(int i = 0; i < num_threads; i++) {
+		pthread_join(clients[i], NULL);
+	}
+	pthread_mutex_destroy(out_lock);
+	free(in);
+	free(clients);
+	free(out_lock);
 	/* Destroy protection domain */
 	
 	rdma_destroy_event_channel(cm_event_channel);
-	e_shutdown = clock();
 	printf("Client resource clean up is complete \n");
-	printf("%f seconds to shutdown\n", ((double)(b_shutdown-e_shutdown)/CLOCKS_PER_SEC));
+	printf("%f seconds to shutdown\n", (num_ops/((start - end) / CLOCKS_PER_SEC)));
 	return 0;
 }
