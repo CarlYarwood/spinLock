@@ -311,7 +311,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 		return NULL;
 	}
 
-	printf("The client is connected successfully \n");
+	// printf("The client is connected successfully \n");
 	if(process_work_completion_events(ctx->comp, &wc, 1) != 1) {
 		perror("We failed to get 1 work completions \n");
 		return NULL;
@@ -462,13 +462,10 @@ int main(int argc, char** argv) {
 		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
 		return -errno;
 	}
-	printf("before thread and in alloc");
 	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
 	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
-	printf("after thread and in alloc");
 
 	for (int i = 0; i < num_threads; i++) {
-		printf("in loop");
 		(&in[i])->cm_event_channel = cm_event_channel;
 		(&in[i])->server_sockaddr = server_sockaddr;
 		(&in[i])->node_id = id;
@@ -491,6 +488,6 @@ int main(int argc, char** argv) {
 	/* Destroy protection domain */
 	
 	rdma_destroy_event_channel(cm_event_channel);
-	printf("Client resource clean up is complete \n");
+	// printf("Client resource clean up is complete \n");
 	return 0;
 }
