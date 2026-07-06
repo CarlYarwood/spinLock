@@ -399,8 +399,7 @@ void * rdma_client(void * in) {
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
-	*node_id = ((struct rdma_client_in *) in)->node_id;
-	
+
 	pthread_mutex_lock(event_manager_lock);
 	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response);
 	pthread_mutex_unlock(event_manager_lock);
@@ -413,7 +412,7 @@ void * rdma_client(void * in) {
 		}
 		//lock
 		// b_acquire = clock();
-		ticket acquire_lock(ctx, response);
+		ticket = acquire_lock(ctx, response);
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
