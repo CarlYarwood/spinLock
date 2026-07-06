@@ -235,7 +235,7 @@ int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) 
         perror("lock release failed\n");
         return -1;
     }
-    printf("lock release successful\n");
+    // printf("lock release successful\n");
 	return 0;
 }
 
@@ -459,7 +459,7 @@ int main(int argc, char** argv) {
 	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
 	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
 
-	for (int i = 0; i<num_threads; i++) {
+	for (int i = 0; i < num_threads; i++) {
 		(&in[i])->cm_event_channel = cm_event_channel;
 		(&in[i])->server_sockaddr = server_sockaddr;
 		(&in[i])->node_id = id;
@@ -471,12 +471,12 @@ int main(int argc, char** argv) {
 	}
 
 	for(int i = 0; i < num_threads; i++) {
-		pthread_join(&clients[i], NULL);
+		pthread_join(clients[i], NULL);
 	}
 	pthread_mutex_destroy(out_lock);
 	free(in);
 	free(clients);
-	free(out_lock);
+	// free(out_lock);
 	/* Destroy protection domain */
 	
 	rdma_destroy_event_channel(cm_event_channel);
