@@ -279,7 +279,6 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 		return NULL;
 	}
 
-	pthread_mutex_lock()
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ROUTE_RESOLVED, &cm_event)) {
 		perror("Failed to receive a valid event, ret = %d \n");
 		return NULL;
