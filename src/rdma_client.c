@@ -460,6 +460,7 @@ int main(int argc, char** argv) {
 	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
 
 	for (int i = 0; i < num_threads; i++) {
+		printf("in loop");
 		(&in[i])->cm_event_channel = cm_event_channel;
 		(&in[i])->server_sockaddr = server_sockaddr;
 		(&in[i])->node_id = id;
