@@ -276,7 +276,7 @@ int release_lock(struct c_ticket_ctx* ctx, uint64_t ticket, uint64_t *response) 
         perror("de-latch failed\n");
         return -1;
     }
-    printf("de-latch successful\n");
+    // printf("de-latch successful\n");
 	return 0;
 }
 struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response) {
