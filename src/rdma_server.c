@@ -22,7 +22,7 @@ struct s_ticket_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     struct rdma_buffer_attr *server_metadata_attr;
     struct rdma_conn_param conn_param;
     
-    ctx = (struct s_spin_ctx*)malloc(sizeof(struct s_spin_ctx));
+    ctx = (struct s_ticket_ctx*)malloc(sizeof(struct s_ticket_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
 
     pd = ibv_alloc_pd(client_id->verbs);
