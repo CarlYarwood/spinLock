@@ -83,7 +83,7 @@ struct s_ticket_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     }
 
     ticket_mr = rdma_buffer_register(pd, ticket, sizeof(uint64_t)*2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
-    if(!lock_mr){
+    if(!ticket_mr){
         rdma_error("Server failed to create lock memory region \n");
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
