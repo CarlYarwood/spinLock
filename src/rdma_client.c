@@ -5,6 +5,7 @@
 #define noop (void)0
 
 pthread_mutex_t *out_lock = NULL;
+pthread_mutex_t *event_manager_lock = NULL;
 
 struct rdma_client_in {
 	struct rdma_event_channel *cm_event_channel;
@@ -278,6 +279,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 		return NULL;
 	}
 
+	pthread_mutex_lock()
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ROUTE_RESOLVED, &cm_event)) {
 		perror("Failed to receive a valid event, ret = %d \n");
 		return NULL;
@@ -360,8 +362,10 @@ void * rdma_client(void * in) {
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
-
+	
+	pthread_mutex_lock(event_manager_lock);
 	ctx = connect_to_server(cm_event_channel, &server_sockaddr, node_id, response);
+	pthread_mutex_unlock(event_manager_lock);
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
@@ -386,7 +390,9 @@ void * rdma_client(void * in) {
 	}
 	end = clock();
 
-	disconnect_from_server(cm_event_channel, ctx);	
+	pthread_mutex_lock(event_manager_lock);
+	disconnect_from_server(cm_event_channel, ctx);
+	pthread_mutex_unlock(event_manager_lock);
 	/* We free the buffers */
 	free(node_id);
 	free(response);
@@ -404,10 +410,9 @@ int main(int argc, char** argv) {
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
-	printf("start");
+	event_manager_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
 	out_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
 	pthread_mutex_init(out_lock, NULL);
-	printf("mutex allocated");
 	noncritical_section = 1;
 	critical_section = 1;
 	num_aquire = 1;
@@ -479,9 +484,11 @@ int main(int argc, char** argv) {
 		pthread_join(clients[i], NULL);
 	}
 	pthread_mutex_destroy(out_lock);
+	pthread_mutex_destroy(event_manager_lock);
 	free(in);
 	free(clients);
-	// free(out_lock);
+	free(out_lock);
+	free(event_manager_lock);
 	/* Destroy protection domain */
 	
 	rdma_destroy_event_channel(cm_event_channel);
