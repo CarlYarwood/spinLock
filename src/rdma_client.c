@@ -363,7 +363,7 @@ void * rdma_client(void * in) {
 	*node_id = ((struct rdma_client_in *) in)->node_id;
 	
 	pthread_mutex_lock(event_manager_lock);
-	ctx = connect_to_server(cm_event_channel, &server_sockaddr, node_id, response);
+	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response);
 	pthread_mutex_unlock(event_manager_lock);
 	start = clock();
 
