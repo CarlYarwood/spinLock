@@ -1,35 +1,43 @@
 #include "rdma_common.h"
 
-struct s_spin_ctx {
+struct s_mcs_ctx {
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
     struct ibv_cq* cq;
     struct ibv_mr* lock_mr;
     struct ibv_mr* server_metadata_mr;
+    struct ibv_mr* client_metadata_mr;
     struct rdma_buffer_attr* server_metadata_attr;
+    struct rdma_buffer_attr* client_metadata_attr;
 };
 
 uint64_t *lock = NULL;
 
-struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
-    struct s_spin_ctx* ctx;
+struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id) {
+    struct s_mcs_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
     struct ibv_mr *lock_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
+    struct ibv_mr *client_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr;
+    struct rdma_buffer_attr *client_metadata_attr;
     struct rdma_conn_param conn_param;
+    struct ibv_sge client_recv_sge;
+    struct ibv_recv_wr client_recv_wr, *bad_client_recv_wr = NULL;
     
-    ctx = (struct s_spin_ctx*)malloc(sizeof(struct s_spin_ctx));
+    ctx = (struct s_mcs_ctx*)malloc(sizeof(struct s_mcs_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
+    client_metadata_attr = (struct rdma_buffer_attr *) malloc(sizeof(struct rdma_buffer_attr);)
 
     pd = ibv_alloc_pd(client_id->verbs);
     if (!pd) {
         rdma_error("Failed to allocate a protection domain errno: %d\n", -errno);
         free(ctx);
         free(server_metadata_attr);
+        free(client_metadata_attr);
         return NULL;
     }
 
@@ -39,6 +47,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
+        free(client_metadata_attr);
         return NULL;
     }
 
@@ -49,6 +58,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
+        free(client_metadata_attr);
         return NULL;
     }
 
@@ -59,6 +69,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
+        free(client_metadata_attr);
         return NULL;
     }
 
@@ -79,10 +90,11 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
+        free(client_metadata_attr);
         return NULL;
     }
 
-    lock_mr = rdma_buffer_register(pd, lock, sizeof(*lock), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    lock_mr = rdma_buffer_register(pd, lock, sizeof(uint64_t) * 2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!lock_mr){
         rdma_error("Server failed to create lock memory region \n");
         ibv_destroy_cq(cq);
@@ -90,6 +102,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
+        free(client_metadata_attr);
         return NULL;
     }
 
@@ -99,12 +112,50 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     server_metadata_mr = rdma_buffer_register(pd, server_metadata_attr, sizeof(*server_metadata_attr), (IBV_ACCESS_LOCAL_WRITE));
     if(!server_metadata_mr){
         rdma_error("Server failed to create to hold server metadata \n");
-        rdma_buffer_free(lock_mr);
+        rdma_buffer_deregister(lock_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
+        free(client_metadata_attr);
+        return NULL;
+    }
+
+
+
+    client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(struct rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE));
+    if(!client_metadata_mr) {
+        rdma_error("Server failed to create to hold server metadata \n");
+        rdma_buffer_deregister(server_metadata_mr);
+        rdma_buffer_deregister(lock_mr);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+        free(ctx);
+        free(server_metadata_attr);
+        free(client_metadata_attr);
+        return NULL;
+    }
+
+    client_recv_sge.addr = (uint64_t)client_metadata_mr->addr;
+    client_recv_sge.length = (uint32_t)client_metadata_mr->length;
+    client_recv_sge.lkey = (uint32_t) client_metadata_mr->lkey;
+
+    bzero(&client_recv_wr, sizeof(ibv_recv_wr));
+    server_recv_wr.sg_list(&server_recv_sge);
+    server_recv_wr.num_sge = 1;
+    if(ibv_post_recv(client_id->qp, &client_recv_wr, &bad_client_recv_wr)) {
+        rdma_error("Server failed to create to hold server metadata \n");
+        rdma_buffer_deregister(client_metadata_mr);
+        rdma_buffer_deregister(server_metadata_mr);
+        rdma_buffer_deregister(lock_mr);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+        free(ctx);
+        free(server_metadata_attr);
+        free(client_metadata_attr);
         return NULL;
     }
 
@@ -113,13 +164,15 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     (*ctx).cq = cq;  
     (*ctx).lock_mr = lock_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
+    (*ctx).client_metadata_mr = client_metadata_mr;
     (*ctx).server_metadata_attr = server_metadata_attr;
+    (*ctx).client_metadata_attr = client_metadata_attr;
     printf("context built\n");
     return ctx;
 }
 
 int send_server_metadata(struct rdma_cm_id* client_id) {
-    struct s_spin_ctx * ctx = (struct s_spin_ctx *) client_id->context;
+    struct s_mcs_ctx * ctx = (struct s_mcs_ctx *) client_id->context;
     struct ibv_wc wc;
     struct ibv_sge server_send_sge;
     struct ibv_send_wr server_send_wr, *bad_server_send_wr = NULL;
@@ -140,7 +193,7 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 	    return -errno;
     }
 
-    if (process_work_completion_events((ctx->comp), &wc, 1) != 1) {
+    if (process_work_completion_events((ctx->comp), &wc, 2) != 2) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
     }
@@ -149,7 +202,7 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 }
 
 int clean_up_context(struct rdma_cm_id* client_id) {
-    struct s_spin_ctx *ctx = (struct s_spin_ctx *)client_id->context;
+    struct s_mcs_ctx *ctx = (struct s_mcs_ctx *)client_id->context;
     rdma_destroy_qp(client_id);
 
     if (rdma_destroy_id(client_id)) {
@@ -168,6 +221,7 @@ int clean_up_context(struct rdma_cm_id* client_id) {
     }
     rdma_buffer_deregister(ctx->lock_mr);
     rdma_buffer_deregister(ctx->server_metadata_mr);
+    rdma_buffer_deregister(ctx->client_metadata_mr);
 
 
     if (ibv_dealloc_pd(ctx->pd)) {
@@ -175,6 +229,7 @@ int clean_up_context(struct rdma_cm_id* client_id) {
         return -errno;
     }
     free(ctx->server_metadata_attr);
+    free(ctx->client_metadata_attr);
     free(ctx);
     printf("context cleaned up\n");
     return 0;
@@ -186,8 +241,9 @@ int main(int argc, char** argv) {
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
 
-    lock = calloc(1, sizeof(uint64_t));
-    *lock = 0;
+    lock = calloc(2, sizeof(uint64_t));
+    lock[LOCK] = 0;
+    lock[CLOCK] = 0;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -250,12 +306,12 @@ int main(int argc, char** argv) {
 
         switch (cm_event->event){
             case RDMA_CM_EVENT_CONNECT_REQUEST :
-                struct s_spin_ctx* ctx = NULL;
+                struct s_mcs_ctx* ctx = NULL;
                 struct rdma_conn_param conn_param;
                 
                 client_id = cm_event->id;
 
-                ctx = build_server_spin_context(client_id);
+                ctx = build_server_mcs_context(client_id);
                 if(!ctx) {
                     rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");

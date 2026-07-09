@@ -26,6 +26,12 @@
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 
+#define NEXT 0
+#define NOTIFY 1
+
+#define LOCK 0
+#define CLOCK 1
+
 /* Error Macro*/
 #define rdma_error(msg, args...) do {\
 	fprintf(stderr, "%s : %d : ERROR : "msg, __FILE__, __LINE__, ## args);\
