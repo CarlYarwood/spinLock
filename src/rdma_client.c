@@ -35,6 +35,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
     struct ibv_mr *response_mr = NULL;
     struct ibv_mr *metadata_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
+    struct ibv_mr *client_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr = NULL;
     struct rdma_buffer_attr *client_metadata_attr = NULL;
@@ -215,7 +216,7 @@ int send_client_metadata(struct c_spin_ctx *ctx) {
     client_send_sge.length = sizeof(*(ctx->client_metadata_attr));
     client_send_sge.lkey = (ctx->client_metadata_mr)->lkey;
 
-    bzero(&server_send_wr, sizeof(server_send_wr));
+    bzero(&client_send_wr, sizeof(client_send_wr));
     client_send_wr.sg_list = &client_send_sge;
     client_send_wr.num_sge = 1;
     client_send_wr.opcode = IBV_WR_SEND;
@@ -321,7 +322,7 @@ int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) 
 	return 0;
 }
 
-struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response) {
+struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *metadata) {
 	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -354,7 +355,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_spin_context(cm_client_id, response);
+	ctx = build_client_spin_context(cm_client_id, response, metadata);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
@@ -442,14 +443,16 @@ void * rdma_client(void * in) {
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
+    metadata[NEXT] = 0;
+    metadata[NOTIFY] = 0;
 
     cm_event_channel = rdma_create_event_channel();
     if (!cm_event_channel) {
 		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
-		return -errno;
+		return NULL;
 	}
 	
-	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response);
+	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, metadata);
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
