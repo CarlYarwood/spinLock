@@ -138,12 +138,12 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id) {
         return NULL;
     }
 
-    client_recv_sge.addr = (uint64_t)client_metadata_mr->addr;
-    client_recv_sge.length = (uint32_t)client_metadata_mr->length;
-    client_recv_sge.lkey = (uint32_t) client_metadata_mr->lkey;
+    server_recv_sge.addr = (uint64_t)client_metadata_mr->addr;
+    server_recv_sge.length = (uint32_t)client_metadata_mr->length;
+    server_recv_sge.lkey = (uint32_t) client_metadata_mr->lkey;
 
     bzero(&server_recv_wr, sizeof(struct ibv_recv_wr));
-    server_recv_wr.sg_list(&server_recv_sge);
+    server_recv_wr.sg_list = &server_recv_sge;
     server_recv_wr.num_sge = 1;
     if(ibv_post_recv(client_id->qp, &server_recv_wr, &bad_server_recv_wr)) {
         rdma_error("Server failed to create to hold server metadata \n");
