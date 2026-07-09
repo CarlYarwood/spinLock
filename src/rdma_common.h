@@ -58,9 +58,6 @@
 /* Default port where the RDMA server is listening */
 #define DEFAULT_RDMA_PORT (20886)
 
-char* address[1] = {"128.110.219.127"};
-long port[1] = {DEFAULT_RDMA_PORT};
-
 /* 
  * We use attribute so that compiler does not step in and try to pad the structure.
  * We use this structure to exchange information between the server and the client. 

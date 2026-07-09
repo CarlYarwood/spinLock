@@ -5,6 +5,8 @@
 #define noop (void)0
 
 pthread_mutex_t *out_lock = NULL;
+char* address[1] = {"128.110.219.127"};
+long port[1] = {DEFAULT_RDMA_PORT};
 
 struct rdma_client_in {
 	uint64_t node_id;
