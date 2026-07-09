@@ -259,7 +259,7 @@ int destroy_context(struct c_spin_ctx* ctx){
 	rdma_buffer_deregister(ctx->server_metadata_mr);
 	rdma_buffer_deregister(ctx->response_mr);
     rdma_buffer_deregister(ctx->metadata_mr);
-    rdma_buffer_deregister(ctx->client_metadata_mr)
+    rdma_buffer_deregister(ctx->client_metadata_mr);
 
 	if (ibv_dealloc_pd(ctx->pd)) {
 		rdma_error("Failed to destroy client protection domain cleanly, %d \n", -errno);
