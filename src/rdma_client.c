@@ -14,8 +14,9 @@ struct rdma_client_in {
 	int num_aquire;
 };
 
-struct c_spin_ctx {
+struct c_mcs_ctx {
 	struct rdma_cm_id* client_id;
+    struct rdma_event_channel* cm_event_channel;
 	struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
 	struct ibv_cq* cq;
@@ -27,8 +28,8 @@ struct c_spin_ctx {
     struct rdma_buffer_attr* client_metadata_attr;
 };
 
-struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *response, uint64_t *metadata) {
-	struct c_spin_ctx *ctx = NULL;
+struct c_mcs_ctx* build_client_spin_context(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_event_channel, uint64_t *response, uint64_t *metadata) {
+	struct c_mcs_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
@@ -42,7 +43,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	struct ibv_sge server_recv_sge;
 	struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
 
-	ctx = (struct c_spin_ctx*)malloc(sizeof(struct c_spin_ctx));
+	ctx = (struct c_mcs_ctx*)malloc(sizeof(struct c_mcs_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
     client_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
 
@@ -193,6 +194,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	debug("Receive buffer pre-posting is successful \n");
 
 	ctx->client_id = client_id;
+    ctx->cm_event_channel = cm_event_channel;
 	ctx->pd = pd;
 	ctx->comp = comp;
 	ctx->cq = cq;
@@ -206,7 +208,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	return ctx;
 }
 
-int send_client_metadata(struct c_spin_ctx *ctx) {
+int send_client_metadata(struct c_mcs_ctx *ctx) {
     struct ibv_wc wc;
     struct ibv_sge client_send_sge;
     struct ibv_send_wr client_send_wr, *bad_client_send_wr = NULL;
@@ -235,7 +237,7 @@ int send_client_metadata(struct c_spin_ctx *ctx) {
     return 0;
 }
 
-int destroy_context(struct c_spin_ctx* ctx){
+int destroy_context(struct c_mcs_ctx* ctx){
 	int ret = 0;
 	rdma_destroy_qp(ctx->client_id);
 
@@ -270,12 +272,14 @@ int destroy_context(struct c_spin_ctx* ctx){
 	free(ctx->server_metadata_attr);
     free(ctx->client_metadata_attr);
 
+    rdma_destroy_event_channel(ctx->cm_event_channel);
+
 	return ret;
 }
 
 
 
-int copmare_and_swap(struct c_spin_ctx* ctx, uint64_t cmp, uint64_t swap) {
+int copmare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap) {
     uint64_t ret = -1;
     struct ibv_send_wr cas_wr, *bad_cas_wr = NULL;
     struct ibv_wc cas_wc;
@@ -308,14 +312,14 @@ int copmare_and_swap(struct c_spin_ctx* ctx, uint64_t cmp, uint64_t swap) {
     return 0;
 }
 
-int acquire_lock(struct c_spin_ctx * ctx,uint64_t *node_id, uint64_t *response) {
+int acquire_lock(struct c_mcs_ctx * ctx,uint64_t *node_id, uint64_t *response) {
 	do {
         copmare_and_swap(ctx, 0, *node_id);
     } while(*response != 0);
 	return 0;
 }
 
-int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) {
+int release_lock(struct c_mcs_ctx *ctx, uint64_t* node_id, uint64_t *response) {
 	copmare_and_swap(ctx, *node_id, 0);
     if(*response != *node_id) {
         perror("lock release failed\n");
@@ -325,12 +329,19 @@ int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) 
 	return 0;
 }
 
-struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *metadata) {
-	struct c_spin_ctx *ctx = NULL;
+struct c_mcs_ctx* connect(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *metadata) {
+	struct c_mcs_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
+    struct rdma_event_channel *cm_event_channel = NULL;
 	struct rdma_conn_param conn_param;
 	struct ibv_wc wc;
+
+    cm_event_channel = rdma_create_event_channel();
+    if (!cm_event_channel) {
+		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
+		return NULL;
+	}
 
 	if (rdma_create_id(cm_event_channel, &cm_client_id, NULL, RDMA_PS_TCP)) {
 		rdma_error("Creating cm id failed with errno: %d \n", -errno); 
@@ -358,7 +369,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_spin_context(cm_client_id, response, metadata);
+	ctx = build_client_spin_context(cm_client_id, cm_event_channel, response, metadata);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
@@ -404,7 +415,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	return ctx;
 }
 
-int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c_spin_ctx* ctx){
+int disconnect(struct c_mcs_ctx* ctx){
 	struct rdma_cm_event *cm_event = NULL;
 	int ret = 0;
 	if (rdma_disconnect(ctx->client_id)) {
@@ -412,7 +423,7 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 		ret = -1;
 		//continuing anyways
 	}
-	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
+	if (process_rdma_cm_event(ctx->cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
 		perror("Failed to get RDMA_CM_EVENT_DISCONNECTED event, ret = %d\n");
 		ret = -1;
 		//continuing anyways 
@@ -434,8 +445,7 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 }
 
 void * rdma_client(void * in) {
-	struct c_spin_ctx *ctx = NULL;
-	struct rdma_event_channel *cm_event_channel = NULL;
+	struct c_mcs_ctx *ctx = NULL;
 	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
     uint64_t *node_id = calloc(1, sizeof(uint64_t));
@@ -448,14 +458,8 @@ void * rdma_client(void * in) {
 	*node_id = ((struct rdma_client_in *) in)->node_id;
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
-
-    cm_event_channel = rdma_create_event_channel();
-    if (!cm_event_channel) {
-		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
-		return NULL;
-	}
 	
-	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, metadata);
+	ctx = connect(&server_sockaddr, response, metadata);
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
@@ -480,9 +484,8 @@ void * rdma_client(void * in) {
 	}
 	end = clock();
 
-	disconnect_from_server(cm_event_channel, ctx);
+	disconnect(ctx);
 	/* We free the buffers */
-    rdma_destroy_event_channel(cm_event_channel);
 	free(node_id);
 	free(response);
     free(metadata);
@@ -494,7 +497,6 @@ void * rdma_client(void * in) {
 }
 
 int main(int argc, char** argv) {
-    struct rdma_event_channel *cm_event_channel = NULL;
 	struct rdma_client_in *in = NULL;
 	struct sockaddr_in server_sockaddr;
     int option, noncritical_section, critical_section, num_aquire, num_threads;
