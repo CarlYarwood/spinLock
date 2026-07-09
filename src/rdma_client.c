@@ -7,7 +7,6 @@
 pthread_mutex_t *out_lock = NULL;
 
 struct rdma_client_in {
-	struct sockaddr_in server_sockaddr;
 	uint64_t node_id;
 	int critical_section;
 	int noncritical_section;
@@ -446,7 +445,7 @@ int mcs_disconnect(struct c_mcs_ctx* ctx){
 
 void * rdma_client(void * in) {
 	struct c_mcs_ctx *ctx = NULL;
-	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
+	struct sockaddr_in server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
     uint64_t *node_id = calloc(1, sizeof(uint64_t));
 	uint64_t *metadata = calloc(2, sizeof(uint64_t));
@@ -458,6 +457,14 @@ void * rdma_client(void * in) {
 	*node_id = ((struct rdma_client_in *) in)->node_id;
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
+
+    bzero(&server_sockaddr, sizeof server_sockaddr);
+    server_sockaddr.sin_family = AF_INET;    
+    if (get_addr(address[0], (struct sockaddr*) &server_sockaddr)) {
+		rdma_error("Invalid IP \n");
+		return NULL;
+	}
+    server_sockaddr.sin_port = htons(port[0]);
 	
 	ctx = mcs_connect(&server_sockaddr, response, metadata);
 	start = clock();
@@ -498,7 +505,6 @@ void * rdma_client(void * in) {
 
 int main(int argc, char** argv) {
 	struct rdma_client_in *in = NULL;
-	struct sockaddr_in server_sockaddr;
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
@@ -515,15 +521,6 @@ int main(int argc, char** argv) {
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     while ((option = getopt(argc, argv, "a:p:c:n:l:i:t:")) != -1) {
 		switch (option) {
-			case 'a':
-				if (get_addr(optarg, (struct sockaddr*) &server_sockaddr)) {
-					rdma_error("Invalid IP \n");
-					return -1;
-				}
-				break;
-			case 'p':
-				server_sockaddr.sin_port = htons(strtol(optarg, NULL, 0)); 
-				break;
 			case 'c':
 				critical_section = atoi(optarg);
 				break;
@@ -544,16 +541,11 @@ int main(int argc, char** argv) {
 				break;
 		}
 	}
-	if (!server_sockaddr.sin_port) {
-	  /* no port provided, use the default port */
-	  server_sockaddr.sin_port = htons(DEFAULT_RDMA_PORT);
-	}
 
 	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
 	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
 
 	for (int i = 0; i < num_threads; i++) {
-		(&in[i])->server_sockaddr = server_sockaddr;
 		(&in[i])->node_id = id;
 		(&in[i])->critical_section = critical_section;
 		(&in[i])->noncritical_section = noncritical_section;
