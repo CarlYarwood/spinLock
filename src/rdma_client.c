@@ -435,7 +435,7 @@ void * rdma_client(void * in) {
 	struct rdma_event_channel *cm_event_channel = NULL;
 	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
-    uint64_t *node_id = calloc(1, sizeof(uint64_t))
+    uint64_t *node_id = calloc(1, sizeof(uint64_t));
 	uint64_t *metadata = calloc(2, sizeof(uint64_t));
 	int critical_section = ((struct rdma_client_in *) in)->critical_section;
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
