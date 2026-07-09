@@ -3,8 +3,6 @@
 #include "rdma_common.h"
 
 #define noop (void)0
-#define NEXT (0)
-#define NOTIFY (1)
 
 pthread_mutex_t *out_lock = NULL;
 
