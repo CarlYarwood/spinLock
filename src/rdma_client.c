@@ -518,9 +518,6 @@ int main(int argc, char** argv) {
 	num_threads = 1;
 	id = 1;
 
-    bzero(&server_sockaddr, sizeof server_sockaddr);
-	server_sockaddr.sin_family = AF_INET;
-	server_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     while ((option = getopt(argc, argv, "a:p:c:n:l:i:t:")) != -1) {
 		switch (option) {
 			case 'c':
