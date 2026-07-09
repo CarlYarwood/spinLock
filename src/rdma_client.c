@@ -234,7 +234,6 @@ int send_client_metadata(struct c_mcs_ctx *ctx) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
     }
-    printf("metadata sent\n");
     return 0;
 }
 
