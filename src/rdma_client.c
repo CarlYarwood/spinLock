@@ -329,7 +329,7 @@ int release_lock(struct c_mcs_ctx *ctx, uint64_t* node_id, uint64_t *response) {
 	return 0;
 }
 
-struct c_mcs_ctx* connect(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *metadata) {
+struct c_mcs_ctx* mcs_connect(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *metadata) {
 	struct c_mcs_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -415,7 +415,7 @@ struct c_mcs_ctx* connect(struct rdma_event_channel* cm_event_channel, struct so
 	return ctx;
 }
 
-int disconnect(struct c_mcs_ctx* ctx){
+int mcs_disconnect(struct c_mcs_ctx* ctx){
 	struct rdma_cm_event *cm_event = NULL;
 	int ret = 0;
 	if (rdma_disconnect(ctx->client_id)) {
@@ -459,7 +459,7 @@ void * rdma_client(void * in) {
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
 	
-	ctx = connect(&server_sockaddr, response, metadata);
+	ctx = mcs_connect(&server_sockaddr, response, metadata);
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
@@ -484,7 +484,7 @@ void * rdma_client(void * in) {
 	}
 	end = clock();
 
-	disconnect(ctx);
+	mcs_disconnect(ctx);
 	/* We free the buffers */
 	free(node_id);
 	free(response);
