@@ -25,12 +25,12 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id) {
     struct rdma_buffer_attr *server_metadata_attr;
     struct rdma_buffer_attr *client_metadata_attr;
     struct rdma_conn_param conn_param;
-    struct ibv_sge client_recv_sge;
-    struct ibv_recv_wr client_recv_wr, *bad_client_recv_wr = NULL;
+    struct ibv_sge server_recv_sge;
+    struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
     
     ctx = (struct s_mcs_ctx*)malloc(sizeof(struct s_mcs_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
-    client_metadata_attr = (struct rdma_buffer_attr *) malloc(sizeof(struct rdma_buffer_attr);)
+    client_metadata_attr = (struct rdma_buffer_attr *) malloc(sizeof(struct rdma_buffer_attr));
 
     pd = ibv_alloc_pd(client_id->verbs);
     if (!pd) {
@@ -142,10 +142,10 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id) {
     client_recv_sge.length = (uint32_t)client_metadata_mr->length;
     client_recv_sge.lkey = (uint32_t) client_metadata_mr->lkey;
 
-    bzero(&client_recv_wr, sizeof(ibv_recv_wr));
+    bzero(&server_recv_wr, sizeof(struct ibv_recv_wr));
     server_recv_wr.sg_list(&server_recv_sge);
     server_recv_wr.num_sge = 1;
-    if(ibv_post_recv(client_id->qp, &client_recv_wr, &bad_client_recv_wr)) {
+    if(ibv_post_recv(client_id->qp, &server_recv_wr, &bad_server_recv_wr)) {
         rdma_error("Server failed to create to hold server metadata \n");
         rdma_buffer_deregister(client_metadata_mr);
         rdma_buffer_deregister(server_metadata_mr);
