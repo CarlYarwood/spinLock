@@ -329,7 +329,7 @@ int release_lock(struct c_mcs_ctx *ctx, uint64_t* node_id, uint64_t *response) {
 	return 0;
 }
 
-struct c_mcs_ctx* mcs_connect(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *metadata) {
+struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *metadata) {
 	struct c_mcs_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
