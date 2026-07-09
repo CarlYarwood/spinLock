@@ -258,6 +258,8 @@ int destroy_context(struct c_spin_ctx* ctx){
 	/* Destroy memory buffers */
 	rdma_buffer_deregister(ctx->server_metadata_mr);
 	rdma_buffer_deregister(ctx->response_mr);
+    rdma_buffer_deregister(ctx->metadata_mr);
+    rdma_buffer_deregister(ctx->client_metadata_mr)
 
 	if (ibv_dealloc_pd(ctx->pd)) {
 		rdma_error("Failed to destroy client protection domain cleanly, %d \n", -errno);
@@ -266,6 +268,7 @@ int destroy_context(struct c_spin_ctx* ctx){
 	}
 
 	free(ctx->server_metadata_attr);
+    free(ctx->client_metadata_attr);
 
 	return ret;
 }
@@ -482,6 +485,7 @@ void * rdma_client(void * in) {
     rdma_destroy_event_channel(cm_event_channel);
 	free(node_id);
 	free(response);
+    free(metadata);
 
 	pthread_mutex_lock(out_lock);
 	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
