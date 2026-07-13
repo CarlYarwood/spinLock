@@ -4,11 +4,45 @@
 
 #define noop (void)0
 
-#define TOTAL_NODES 0
+#define TOTAL_NODES 15
 
 pthread_mutex_t *out_lock = NULL;
-char* address[TOTAL_NODES + 1] = {"128.110.219.80"};
-long port[TOTAL_NODES + 1] = {DEFAULT_RDMA_PORT};
+char* address[TOTAL_NODES + 1] = {
+    "128.110.219.80",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84",
+    "128.110.219.84"
+};
+long port[TOTAL_NODES + 1] = {
+    DEFAULT_RDMA_PORT,
+    DEFAULT_RDMA_PORT,
+    DEFAULT_RDMA_PORT + 1,
+    DEFAULT_RDMA_PORT + 2,
+    DEFAULT_RDMA_PORT + 3,
+    DEFAULT_RDMA_PORT + 4,
+    DEFAULT_RDMA_PORT + 5,
+    DEFAULT_RDMA_PORT + 6,
+    DEFAULT_RDMA_PORT + 7,
+    DEFAULT_RDMA_PORT + 8,
+    DEFAULT_RDMA_PORT + 9,
+    DEFAULT_RDMA_PORT + 10,
+    DEFAULT_RDMA_PORT + 11,
+    DEFAULT_RDMA_PORT + 12,
+    DEFAULT_RDMA_PORT + 13,
+    DEFAULT_RDMA_PORT + 14
+};
 
 struct rdma_client_in {
 	uint64_t node_id;
@@ -745,6 +779,7 @@ void * rdma_client(void * in) {
         ctx_arr[i] = NULL;
     }
 
+    sleep(10);
     bzero(&server_sockaddr, sizeof server_sockaddr);
     server_sockaddr.sin_family = AF_INET;    
     if (get_addr(address[0], (struct sockaddr*) &server_sockaddr)) {
