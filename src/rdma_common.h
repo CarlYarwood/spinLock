@@ -26,6 +26,8 @@
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 
+#define SERVER 0
+
 #define NEXT 0
 #define NOTIFY 1
 
