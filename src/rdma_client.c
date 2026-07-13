@@ -635,6 +635,7 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *buf
 		return NULL;
 	}
 
+    printf("RDMA_CM_EVENT_ADDR_RESOLVED\n");
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ADDR_RESOLVED, &cm_event)) {
 		perror("Failed to receive a valid event, ret = %d \n");
 		return NULL;
@@ -657,6 +658,7 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *buf
 		return NULL;
 	}
 
+    printf("RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ROUTE_RESOLVED, &cm_event)) {
 		perror("Failed to receive a valid event, ret = %d \n");
 		return NULL;
@@ -679,6 +681,7 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *buf
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ESTABLISHED\n");
 
+    printf("RDMA_CM_EVENT_EVENT_ESTABLISHED\n");
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ESTABLISHED, &cm_event)) {
 		perror("Failed to get cm event, ret = %d \n");
 	    return NULL;
@@ -705,6 +708,8 @@ int mcs_disconnect(struct c_mcs_ctx* ctx){
 		ret = -1;
 		//continuing anyways
 	}
+
+    printf("RDMA_CM_EVENT_ADDR_DISCONNECTED\n");
 	if (process_rdma_cm_event(ctx->cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
 		perror("Failed to get RDMA_CM_EVENT_DISCONNECTED event, ret = %d\n");
 		ret = -1;
