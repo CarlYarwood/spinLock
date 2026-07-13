@@ -567,7 +567,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
 int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
 	if (metadata[NEXT] == 0) {
         copmare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
-        if(*buffer == node_id) {
+        if(*buffer == *node_id) {
             return 0;
         }
         while(metadata[NEXT] == 0) {}
