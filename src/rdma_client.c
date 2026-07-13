@@ -696,7 +696,7 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *nod
 	conn_param.initiator_depth = 3;
 	conn_param.responder_resources = 3;
 	conn_param.retry_count = 3;
-    conn_param.private_data = *node_id;
+    conn_param.private_data = (void *) *node_id;
     conn_param.private_data_len = sizeof(uint64_t);
 	if (rdma_connect(ctx->client_id, &conn_param)) {
 		rdma_error("Failed to connect to remote host , errno: %d\n", -errno);
