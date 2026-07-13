@@ -848,7 +848,7 @@ void* rdma_server(void *in) {
 		return NULL;
 	}
 
-    pthread_create(&client, NULL, rdma_client,(void *)((struct rdma_server_in) in->in));
+    pthread_create(&client, NULL, rdma_client,(void *)((struct rdma_server_in *) in)->in);
     do {
         struct rdma_cm_event *cm_event = NULL;
         struct rdma_cm_id* client_id = NULL;
