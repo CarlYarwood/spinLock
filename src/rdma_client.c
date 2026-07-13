@@ -49,12 +49,15 @@ struct rdma_client_in {
 	int critical_section;
 	int noncritical_section;
 	int num_aquire;
+    uint64_t *buffer;
+    uint64_t *metadata;
 };
 
 struct c_s_mcs_ctx {
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
     struct ibv_cq* cq;
+    struct ibv_mr* buffer_mr;
     struct ibv_mr* metadata_mr;
     struct ibv_mr* server_metadata_mr;
     struct ibv_mr* client_metadata_mr;
@@ -81,11 +84,12 @@ struct c_mcs_ctx {
     struct rdma_buffer_attr* client_metadata_attr;
 };
 
-struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_t *metadata) {
+struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_t *metadata, uint64_t *buffer) {
     struct c_s_mcs_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
+    struct ibv_mr *buffer_mr = NULL;
     struct ibv_mr *metadata_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
     struct ibv_mr *client_metadata_mr = NULL;
@@ -162,9 +166,22 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
         return NULL;
     }
 
+    buffer_mr = rdma_buffer_register(pd, buffer, sizeof(*buffer), (IBV_ACCESS_LOCAL_WRITE));
+    if(!buffer_mr){
+        rdma_error("Server failed to buffer memory region \n");
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+        free(ctx);
+        free(server_metadata_attr);
+        free(client_metadata_attr);
+        return NULL;
+    }
+
     metadata_mr = rdma_buffer_register(pd, metadata, sizeof(uint64_t) * 2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!metadata_mr){
-        rdma_error("Server failed to create metadata memory region \n");
+        rdma_error("Server failed to create buffer memory region \n");
+        rdma_buffer_deregister(buffer_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
@@ -181,6 +198,7 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
     if(!server_metadata_mr){
         rdma_error("Server failed to create to hold server metadata \n");
         rdma_buffer_deregister(metadata_mr);
+        rdma_buffer_deregister(buffer_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
@@ -197,6 +215,7 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
         rdma_error("Server failed to create to hold server metadata \n");
         rdma_buffer_deregister(server_metadata_mr);
         rdma_buffer_deregister(metadata_mr);
+        rdma_buffer_deregister(buffer_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
@@ -218,6 +237,7 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
         rdma_buffer_deregister(client_metadata_mr);
         rdma_buffer_deregister(server_metadata_mr);
         rdma_buffer_deregister(metadata_mr);
+        rdma_buffer_deregister(buffer_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
@@ -229,7 +249,8 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
 
     (*ctx).pd = pd;
     (*ctx).comp = comp;
-    (*ctx).cq = cq;  
+    (*ctx).cq = cq;
+    (*ctx).buffer_mr = buffer_mr;
     (*ctx).metadata_mr = metadata_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
     (*ctx).client_metadata_mr = client_metadata_mr;
@@ -767,17 +788,15 @@ int clean_up_context(struct rdma_cm_id* client_id) {
 void * rdma_client(void * in) {
 	struct c_mcs_ctx **ctx_arr = NULL;
 	struct sockaddr_in server_sockaddr;
-	uint64_t *buffer = calloc(1, sizeof(uint64_t));
+	uint64_t *buffer = ((struct rdma_client_in *) in)->buffer;
     uint64_t *node_id = calloc(1, sizeof(uint64_t));
-	uint64_t *metadata = calloc(2, sizeof(uint64_t));
+	uint64_t *metadata = ((struct rdma_client_in *) in)->metadata;
 	int critical_section = ((struct rdma_client_in *) in)->critical_section;
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
-    metadata[NEXT] = 0;
-    metadata[NOTIFY] = 0;
 
     ctx_arr = (struct c_mcs_ctx **)malloc(sizeof(struct c_mcs_ctx*) * (TOTAL_NODES + 1));
     for (int i = 0; i< TOTAL_NODES + 1; i++){
@@ -849,19 +868,23 @@ void * rdma_client(void * in) {
 }
 
 void* rdma_server(void *in) {
-    uint64_t *metadata = NULL;
+    uint64_t *metadata = NULL, *buffer = NULL;
     int option, num_conn = 0;
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
     long port = ((struct rdma_server_in *)in)->port;
+    struct rdma_client_in* client_in = ((struct rdma_client_in *)in)->in;
     pthread_t * client = NULL;
 
     client = (pthread_t *)malloc(sizeof(pthread_t));
 
     metadata = calloc(2, sizeof(uint64_t));
+    buffer = calloc(1, sizeof(uint64_t));
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
+    client_in->buffer = buffer;
+    client_in->metadata = metadata;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -888,7 +911,7 @@ void* rdma_server(void *in) {
 		return NULL;
 	}
 
-    pthread_create(client, NULL, rdma_client,(void *)((struct rdma_server_in *) in)->in);
+    pthread_create(client, NULL, rdma_client, (void *)client_in);
     do {
         struct rdma_cm_event *cm_event = NULL;
         struct rdma_cm_id* client_id = NULL;
@@ -911,7 +934,7 @@ void* rdma_server(void *in) {
                 
                 client_id = cm_event->id;
 
-                ctx = build_server_mcs_context(client_id, metadata);
+                ctx = build_server_mcs_context(client_id, metadata, buffer);
                 if(!ctx) {
                     rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");
@@ -1027,6 +1050,8 @@ int main(int argc, char** argv) {
 		(&client_in[i])->critical_section = critical_section;
 		(&client_in[i])->noncritical_section = noncritical_section;
 		(&client_in[i])->num_aquire = num_aquire;
+        (&client_in[i])->buffer = NULL;
+        (&client_in[i])->metadata = NULL;
         (&server_in[i])->port = DEFAULT_RDMA_PORT + i;
         (&server_in[i])->in = &client_in[i];
         
