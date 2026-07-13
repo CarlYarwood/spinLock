@@ -759,7 +759,7 @@ void * rdma_client(void * in) {
         if(i != *node_id) {
             struct sockaddr_in client_sockaddr;
             bzero(&client_sockaddr, sizeof client_sockaddr);
-            client_sockaddr.sin_famil = AF_INET;
+            client_sockaddr.sin_family = AF_INET;
             if(get_addr(address[i], (struct sockaddr*) &client_sockaddr)) {
                 rdma_error("Invalid IP \n");
                 return NULL;
@@ -814,7 +814,7 @@ void* rdma_server(void *in) {
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
-    long port = (struct rdma_server_in *)in->port;
+    long port = ((struct rdma_server_in *)in)->port;
     pthread_t * client = NULL;
 
     client = (pthread_t *)malloc(sizeof(pthread_t));
