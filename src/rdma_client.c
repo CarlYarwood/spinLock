@@ -874,7 +874,7 @@ void* rdma_server(void *in) {
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
     long port = ((struct rdma_server_in *)in)->port;
-    struct rdma_client_in* client_in = ((struct rdma_client_in *)in)->in;
+    struct rdma_client_in* client_in = ((struct rdma_server_in *)in)->in;
     pthread_t * client = NULL;
 
     client = (pthread_t *)malloc(sizeof(pthread_t));
