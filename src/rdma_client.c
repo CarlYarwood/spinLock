@@ -554,8 +554,9 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     if (*buffer == 0) {
         return 0;
     }
+    uint64_t expected = *buffer;
     do {
-        int expected = *buffer;
+        expected = *buffer;
         copmare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
     } while(expected != *buffer);
     copmare_and_swap(ctx_arr[*buffer], 0, *node_id, NEXT);
