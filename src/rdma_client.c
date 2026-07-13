@@ -473,7 +473,6 @@ int main(int argc, char** argv) {
 		(&in[i])->noncritical_section = noncritical_section;
 		(&in[i])->num_aquire = num_aquire;
 		pthread_create(&clients[i], NULL, rdma_client, (void *) &in[i]);
-		id++;
 	}
 
 	for(int i = 0; i < num_threads; i++) {
