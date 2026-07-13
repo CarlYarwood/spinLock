@@ -11,9 +11,7 @@ struct s_mcs_ctx {
     struct rdma_buffer_attr* client_metadata_attr;
 };
 
-uint64_t *lock = NULL;
-
-struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id) {
+struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_t *lock) {
     struct s_mcs_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -236,6 +234,7 @@ int clean_up_context(struct rdma_cm_id* client_id) {
 }
 
 int main(int argc, char** argv) {
+    uint64_t *lock = NULL;
     int option, num_conn = 0;
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
@@ -311,7 +310,7 @@ int main(int argc, char** argv) {
                 
                 client_id = cm_event->id;
 
-                ctx = build_server_mcs_context(client_id);
+                ctx = build_server_mcs_context(client_id, lock);
                 if(!ctx) {
                     rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");
