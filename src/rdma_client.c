@@ -848,7 +848,7 @@ void* rdma_server(void *in) {
 		return NULL;
 	}
 
-    pthread_create(&client, NULL, rdma_client,(void *)((struct rdma_server_in *) in)->in);
+    pthread_create(client, NULL, rdma_client,(void *)((struct rdma_server_in *) in)->in);
     do {
         struct rdma_cm_event *cm_event = NULL;
         struct rdma_cm_id* client_id = NULL;
@@ -861,12 +861,12 @@ void* rdma_server(void *in) {
         if(0 != cm_event->status){
 		    rdma_error("CM event has non zero status: %d\n", cm_event->status);
 		    rdma_ack_cm_event(cm_event);
-		    return -(cm_event->status);
+		    return NULL;
 	    }
 
         switch (cm_event->event){
             case RDMA_CM_EVENT_CONNECT_REQUEST :
-                struct s_mcs_ctx* ctx = NULL;
+                struct c_s_mcs_ctx* ctx = NULL;
                 struct rdma_conn_param conn_param;
                 
                 client_id = cm_event->id;
@@ -932,7 +932,7 @@ void* rdma_server(void *in) {
         }
     } while(num_conn > 0);
 
-    pthread_join(client, NULL);
+    pthread_join(*client, NULL);
 
 	if (rdma_destroy_id(cm_server_id)) {
 		rdma_error("Failed to destroy server id cleanly, %d \n", -errno);
