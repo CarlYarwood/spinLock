@@ -246,26 +246,7 @@ int main(int argc, char** argv) {
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
-	/* Parse Command Line Arguments, not the most reliable code */
-	while ((option = getopt(argc, argv, "a:p:")) != -1) {
-		switch (option) {
-			case 'a':
-				if (get_addr(optarg, (struct sockaddr*) &server_sockaddr)) {
-					rdma_error("Invalid IP \n");
-					 return -1;
-				}
-				break;
-			case 'p':
-				server_sockaddr.sin_port = htons(strtol(optarg, NULL, 0)); 
-				break;
-			default:
-				break;
-		}
-	}
-	if(!server_sockaddr.sin_port) {
-		/* If still zero, that mean no port info provided */
-		server_sockaddr.sin_port = htons(DEFAULT_RDMA_PORT); /* use default port */
-	}
+	server_sockaddr.sin_port = htons(DEFAULT_RDMA_PORT);
 
     cm_event_channel = rdma_create_event_channel();
     if (!cm_event_channel) {
