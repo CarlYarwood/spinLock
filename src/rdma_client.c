@@ -1026,7 +1026,6 @@ int main(int argc, char** argv) {
         (&server_in[i])->in = &client_in[i];
         
 		pthread_create(&clients[i], NULL, rdma_server, (void *) &server_in[i]);
-		id++;
 	}
 
 	for(int i = 0; i < num_threads; i++) {
