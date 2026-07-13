@@ -979,7 +979,7 @@ int main(int argc, char** argv) {
 	}
 
 	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
-    server_in = (struct rdma_server_in *)malloc(sizeof(struct rdma_server_in) * num_thread);
+    server_in = (struct rdma_server_in *)malloc(sizeof(struct rdma_server_in) * num_threads);
 	client_in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
 
 	for (int i = 0; i < num_threads; i++) {
