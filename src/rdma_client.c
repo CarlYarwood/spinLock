@@ -632,7 +632,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
     metadata[NOTIFY] = 0;
 }
 
-struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *buffer, uint64_t *metadata) {
+struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *node_id, uint64_t *buffer, uint64_t *metadata) {
 	struct c_mcs_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -696,6 +696,8 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *buf
 	conn_param.initiator_depth = 3;
 	conn_param.responder_resources = 3;
 	conn_param.retry_count = 3;
+    conn_param.private_data = *node_id;
+    conn_param.private_data_len = sizeof(uint64_t);
 	if (rdma_connect(ctx->client_id, &conn_param)) {
 		rdma_error("Failed to connect to remote host , errno: %d\n", -errno);
 		return NULL;
@@ -812,7 +814,7 @@ void * rdma_client(void * in) {
 	}
     server_sockaddr.sin_port = htons(port[0]);
 	
-	ctx_arr[SERVER] = mcs_connect(&server_sockaddr, buffer, metadata);
+	ctx_arr[SERVER] = mcs_connect(&server_sockaddr, node_id, buffer, metadata);
 
     for(int i = 1; i < TOTAL_NODES + 1; i++) {
         if(i != *node_id) {
@@ -824,7 +826,7 @@ void * rdma_client(void * in) {
                 return NULL;
             }
             server_sockaddr.sin_port = htons(port[i]);
-            ctx_arr[i] = mcs_connect(&server_sockaddr, buffer, metadata);
+            ctx_arr[i] = mcs_connect(&server_sockaddr, node_id, buffer, metadata);
         }
     }
 	start = clock();
@@ -962,6 +964,7 @@ void* rdma_server(void *in) {
             case RDMA_CM_EVENT_ESTABLISHED :
                 client_id = cm_event->id;
 
+                printf("%lu\n", (uint64_t) cm_event->param.conn.private_data);
                 if (rdma_ack_cm_event(cm_event)) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return NULL;
