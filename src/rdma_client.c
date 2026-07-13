@@ -481,7 +481,7 @@ int destroy_context(struct c_mcs_ctx* ctx){
 	return ret;
 }
 
-int rdma_write(struct c_spin_ctx *ctx, int offset) {
+int rdma_write(struct c_mcs_ctx *ctx, int offset) {
 	int ret = -1;
     struct ibv_send_wr write_wr, *bad_write_wr = NULL;
     struct ibv_wc write_wc;
@@ -998,7 +998,7 @@ int main(int argc, char** argv) {
 	}
 	pthread_mutex_destroy(out_lock);
 	free(client_in);
-    free(server_in)
+    free(server_in);
 	free(clients);
 	free(out_lock);
 	return 0;
