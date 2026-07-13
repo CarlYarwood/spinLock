@@ -468,7 +468,7 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < num_threads; i++) {
 		(&in[i])->cm_event_channel = cm_event_channel;
 		(&in[i])->server_sockaddr = server_sockaddr;
-		(&in[i])->node_id = id;
+		(&in[i])->node_id = id + i;
 		(&in[i])->critical_section = critical_section;
 		(&in[i])->noncritical_section = noncritical_section;
 		(&in[i])->num_aquire = num_aquire;
