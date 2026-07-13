@@ -4,7 +4,7 @@
 
 #define noop (void)0
 
-#define TOTAL_NODES 15
+#define TOTAL_NODES 2
 
 pthread_mutex_t *out_lock = NULL;
 char* address[TOTAL_NODES + 1] = {
