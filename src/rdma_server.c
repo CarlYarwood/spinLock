@@ -319,6 +319,8 @@ int main(int argc, char** argv) {
             case RDMA_CM_EVENT_ESTABLISHED :
                 client_id = cm_event->id;
 
+                printf("%lu\n", (uint64_t) cm_event->param.conn.private_data);
+
                 if (rdma_ack_cm_event(cm_event)) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return -errno;
