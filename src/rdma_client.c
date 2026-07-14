@@ -622,7 +622,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     while(metadata[NOTIFY] == 0) {
         // printf("node %lu waiting on Notify\n", *node_id);
     }
-    return(0);
+    return 0;
 }
 
 int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
