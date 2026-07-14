@@ -696,7 +696,7 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *nod
 	conn_param.initiator_depth = 3;
 	conn_param.responder_resources = 3;
 	conn_param.retry_count = 3;
-    conn_param.private_data = (void *) *node_id;
+    conn_param.private_data = (void *) node_id;
     conn_param.private_data_len = sizeof(uint64_t);
 	if (rdma_connect(ctx->client_id, &conn_param)) {
 		rdma_error("Failed to connect to remote host , errno: %d\n", -errno);
@@ -860,8 +860,6 @@ void * rdma_client(void * in) {
     }
 	/* We free the buffers */
 	free(node_id);
-	free(buffer);
-    free(metadata);
 
 	pthread_mutex_lock(out_lock);
 	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
@@ -999,6 +997,9 @@ void* rdma_server(void *in) {
     } while(num_conn > 0);
 
     pthread_join(*client, NULL);
+
+    free(buffer);
+    free(metadata);
 
 	if (rdma_destroy_id(cm_server_id)) {
 		rdma_error("Failed to destroy server id cleanly, %d \n", -errno);
