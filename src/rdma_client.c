@@ -772,6 +772,8 @@ int clean_up_context(struct rdma_cm_id* client_id) {
         printf("Failed to destroy completion channel cleanly, %d \n", -errno);
         return -errno;
     }
+
+    rdma_buffer_deregister(ctx->buffer_mr);
     rdma_buffer_deregister(ctx->metadata_mr);
     rdma_buffer_deregister(ctx->server_metadata_mr);
     rdma_buffer_deregister(ctx->client_metadata_mr);
