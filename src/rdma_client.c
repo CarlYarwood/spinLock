@@ -934,7 +934,7 @@ void* rdma_server(void *in) {
                 struct rdma_conn_param conn_param;
                 
                 client_id = cm_event->id;
-                printf("%lu\n", (uint64_t) cm_event->param.conn.private_data);
+                printf("%lu\n", *((uint64_t *) cm_event->param.conn.private_data));
 
                 ctx = build_server_mcs_context(client_id, metadata, buffer);
                 if(!ctx) {
