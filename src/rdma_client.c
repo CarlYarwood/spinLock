@@ -799,6 +799,7 @@ void * rdma_client(void * in) {
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
+    printf("node id: %lu\n", *node_id);
 
     ctx_arr = (struct c_mcs_ctx **)malloc(sizeof(struct c_mcs_ctx*) * (TOTAL_NODES + 1));
     for (int i = 0; i< TOTAL_NODES + 1; i++){
