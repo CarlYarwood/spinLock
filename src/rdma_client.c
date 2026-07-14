@@ -586,7 +586,7 @@ int copmare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int off
     cas_wr.num_sge = 1;
     cas_wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
     cas_wr.wr.atomic.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
-    cas_wr.wr.atomic.remote_addr = (ctx->server_metadata_attr)->address + sizeof(uint64_t) * offset;
+    cas_wr.wr.atomic.remote_addr = (ctx->server_metadata_attr)->address + (sizeof(uint64_t) * offset);
     cas_wr.wr.atomic.compare_add = cmp;
     cas_wr.wr.atomic.swap = swap;
     cas_wr.send_flags = IBV_SEND_SIGNALED;
@@ -617,6 +617,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     } while(expected != *buffer);
     copmare_and_swap(ctx_arr[*buffer], 0, *node_id, NEXT);
     while(metadata[NOTIFY] == 0) {
+        printf("%lu", metadata[NOTIFY]);
         // printf("node %lu waiting on Notify\n", *node_id);
     }
     return(0);
