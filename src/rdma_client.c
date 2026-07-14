@@ -930,6 +930,7 @@ void* rdma_server(void *in) {
 
         switch (cm_event->event){
             case RDMA_CM_EVENT_CONNECT_REQUEST :
+                printf("server RDMA_CM_EVENT_CONNECT_REQUEST\n");
                 struct c_s_mcs_ctx* ctx = NULL;
                 struct rdma_conn_param conn_param;
                 
@@ -962,6 +963,7 @@ void* rdma_server(void *in) {
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
+                printf("server RDMA_CM_EVENT_ESTABLISHED\n");
                 client_id = cm_event->id;
 
                 if (rdma_ack_cm_event(cm_event)) {
@@ -976,6 +978,7 @@ void* rdma_server(void *in) {
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
+                printf("serve RDMA_CM_EVENT_DISCONNECTED");
                 client_id = cm_event->id;
 
                 if (rdma_ack_cm_event(cm_event)) {
