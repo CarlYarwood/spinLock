@@ -605,7 +605,7 @@ int copmare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int off
 }
 
 int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
-    printf("node %lu aquire lock", *node_id);
+    printf("node %lu aquire lock\n", *node_id);
     copmare_and_swap(ctx_arr[SERVER], 0, *node_id, LOCK);
     if (*buffer == 0) {
         return 0;
@@ -623,7 +623,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
 }
 
 int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
-    printf("node %lu release lock", *node_id);
+    printf("node %lu release lock\n", *node_id);
 	if (metadata[NEXT] == 0) {
         copmare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
         if(*buffer == *node_id) {
