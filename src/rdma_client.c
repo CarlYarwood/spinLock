@@ -826,8 +826,8 @@ void * rdma_client(void * in) {
                 rdma_error("Invalid IP \n");
                 return NULL;
             }
-            server_sockaddr.sin_port = htons(port[i]);
-            ctx_arr[i] = mcs_connect(&server_sockaddr, node_id, buffer, metadata);
+            client_sockaddr.sin_port = htons(port[i]);
+            ctx_arr[i] = mcs_connect(&client_sockaddr, node_id, buffer, metadata);
         }
     }
 	start = clock();
