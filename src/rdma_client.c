@@ -633,7 +633,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
             printf("node %lu waiting on Next\n", *node_id);
         }
     }
-    printf("node %lu metadata Next %lu", *node_id, metadata[NEXT]);
+    printf("node %lu metadata Next %lu\n", *node_id, metadata[NEXT]);
     copmare_and_swap(ctx_arr[metadata[NEXT]], 0, 1, NOTIFY);
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
