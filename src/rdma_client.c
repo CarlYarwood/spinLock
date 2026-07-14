@@ -608,7 +608,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     printf("node %lu aquire lock\n", *node_id);
     uint64_t expected = 0;
     do {
-        copmare_and_swap(ctx_arr[SERVER], 0, *node_id, LOCK);
+        copmare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
         if (expected == *buffer) {
             break;
         }
