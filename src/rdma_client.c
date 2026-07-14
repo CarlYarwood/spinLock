@@ -616,7 +616,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     } while(expected != *buffer);
     copmare_and_swap(ctx_arr[*buffer], 0, *node_id, NEXT);
     while(metadata[NOTIFY] == 0) {
-        printf("node %lu waiting on Notify\n", node_id*);
+        printf("node %lu waiting on Notify\n", *node_id);
     }
     return(0);
 }
