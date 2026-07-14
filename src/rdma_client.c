@@ -606,15 +606,17 @@ int copmare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int off
 
 int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
     printf("node %lu aquire lock\n", *node_id);
-    copmare_and_swap(ctx_arr[SERVER], 0, *node_id, LOCK);
+    uint64_t expected = 0;
+    do {
+        copmare_and_swap(ctx_arr[SERVER], 0, *node_id, LOCK);
+        if (expected == *buffer) {
+            break;
+        }
+        expected = *buffer;
+    } while(1);
     if (*buffer == 0) {
         return 0;
     }
-    uint64_t expected;
-    do {
-        expected = *buffer;
-        copmare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
-    } while(expected != *buffer);
     copmare_and_swap(ctx_arr[*buffer], 0, *node_id, NEXT);
     while(metadata[NOTIFY] == 0) {
         // printf("node %lu waiting on Notify\n", *node_id);
