@@ -712,7 +712,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     do {
         if(wait_for_cq(ctx_arr[back_id]->cq, .01)){
             rdma_read(ctx_arr[SERVER], CLOCK);
-            if(buffer != server_clock) {
+            if(*buffer != server_clock) {
                 acquire_lock(ctx_arr, node_id, buffer, metadata);
             }
         }
