@@ -587,7 +587,7 @@ int post_receive_alert(struct c_mcs_ctx *ctx) {
 	alert_sge.lkey = (uint32_t) (ctx->alert_mr)->lkey;
 
 	bzero(&alert_wr, sizeof(alert_wr));
-	alert_wr.sg_list = &alert_recv_sge;
+	alert_wr.sg_list = &alert_sge;
 	alert_wr.num_sge = 1;
 
     if(ibv_post_recv((ctx->client_id)->qp , &alert_wr, &bad_alert_wr)){
