@@ -766,7 +766,6 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *nod
 		return NULL;
 	}
 
-    printf("RDMA_CM_EVENT_ADDR_RESOLVED\n");
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ADDR_RESOLVED, &cm_event)) {
 		perror("Failed to receive a valid event, ret = %d \n");
 		return NULL;
@@ -789,7 +788,6 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *nod
 		return NULL;
 	}
 
-    printf("RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ROUTE_RESOLVED, &cm_event)) {
 		perror("Failed to receive a valid event, ret = %d \n");
 		return NULL;
@@ -814,7 +812,6 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *nod
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ESTABLISHED\n");
 
-    printf("RDMA_CM_EVENT_EVENT_ESTABLISHED\n");
 	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_ESTABLISHED, &cm_event)) {
 		perror("Failed to get cm event, ret = %d \n");
 	    return NULL;
@@ -842,7 +839,6 @@ int mcs_disconnect(struct c_mcs_ctx* ctx){
 		//continuing anyways
 	}
 
-    printf("RDMA_CM_EVENT_ADDR_DISCONNECTED\n");
 	if (process_rdma_cm_event(ctx->cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
 		perror("Failed to get RDMA_CM_EVENT_DISCONNECTED event, ret = %d\n");
 		ret = -1;
@@ -1043,12 +1039,10 @@ void* rdma_server(void *in) {
 
         switch (cm_event->event){
             case RDMA_CM_EVENT_CONNECT_REQUEST :
-                printf("server RDMA_CM_EVENT_CONNECT_REQUEST\n");
                 struct c_s_mcs_ctx* ctx = NULL;
                 struct rdma_conn_param conn_param;
                 
                 client_id = cm_event->id;
-                printf("%lu\n", *((uint64_t *) cm_event->param.conn.private_data));
 
                 ctx = build_server_mcs_context(client_id, metadata, buffer);
                 if(!ctx) {
@@ -1076,7 +1070,6 @@ void* rdma_server(void *in) {
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
-                printf("server RDMA_CM_EVENT_ESTABLISHED\n");
                 client_id = cm_event->id;
 
                 if (rdma_ack_cm_event(cm_event)) {
@@ -1091,7 +1084,6 @@ void* rdma_server(void *in) {
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
-                printf("server RDMA_CM_EVENT_DISCONNECTED\n");
                 client_id = cm_event->id;
 
                 if (rdma_ack_cm_event(cm_event)) {
