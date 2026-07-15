@@ -951,7 +951,7 @@ void * rdma_client(void * in) {
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
-        sleep_ms(10);
+        usleep(10000);
 		// for (int i=0; i < critical_section; i++) {
 		// 	noop;
 		// }
