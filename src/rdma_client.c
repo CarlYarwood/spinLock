@@ -942,6 +942,7 @@ void * rdma_client(void * in) {
             ctx_arr[i] = mcs_connect(&client_sockaddr, node_id, buffer, metadata);
         }
     }
+    sleep(10);
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
