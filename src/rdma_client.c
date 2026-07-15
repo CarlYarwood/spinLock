@@ -573,7 +573,7 @@ int wake_write(struct c_mcs_ctx *ctx, int offset) {
 
 
 
-int copmare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int offset) {
+int compare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int offset) {
     uint64_t ret = -1;
     struct ibv_send_wr cas_wr, *bad_cas_wr = NULL;
     struct ibv_wc cas_wc;
@@ -680,7 +680,7 @@ int wait_for_cq(struct ibv_cq* cq, float timeout){
     do {
         ne = ibv_poll_cq(cq, 1, &wc);
         if (((double)start - end)/CLOCKS_PER_SEC > timeout) {
-            return -1
+            return -1;
         }
     } while(ne == 0);
     if (ne < 0) {
@@ -694,9 +694,9 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
     uint64_t expected = 0;
-    uint64_t clock;
+    uint64_t server_clock;
     do {
-        copmare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
+        compare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
         if (expected == *buffer) {
             break;
         }
@@ -707,13 +707,13 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     }
     uint64_t back_id = *buffer;
     rdma_read(ctx_arr[SERVER], CLOCK);
-    clock = *buffer;
+    server_clock = *buffer;
     compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
     do {
         if(wait_for_cq(ctx_arr[back_id]->cq, .01)){
             rdma_read(ctx_arr[SERVER], CLOCK);
-            if(buffer != CLOCK) {
-                acquire_lock(ctx_arr, node_id, buffer, metadata)
+            if(buffer != server_clock) {
+                acquire_lock(ctx_arr, node_id, buffer, metadata);
             }
         }
     } while (metadata[NOTIFY] == 0);
@@ -722,7 +722,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
 
 int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
 	if (metadata[NEXT] == 0) {
-        copmare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
+        compare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
         if(*buffer == *node_id) {
             return 0;
         }
