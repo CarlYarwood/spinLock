@@ -696,6 +696,9 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     uint64_t expected = 0;
     uint64_t server_clock;
     printf("node %lu aquire lock start\n", *node_id);
+    rdma_read(ctx_arr[SERVER], CLOCK);
+    server_clock = *buffer;
+    printf("node %lu server clock is %lu\n", *node_id, server_clock);
     do {
         compare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
         if (expected == *buffer) {
@@ -708,10 +711,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
         return 0;
     }
     uint64_t back_id = *buffer;
-    printf("node %lu lock contesed back is %lu\n", *node_id, back_id);
-    rdma_read(ctx_arr[SERVER], CLOCK);
-    server_clock = *buffer;
-    printf("node %lu server clock is %lu\n", *node_id, server_clock);
+    printf("node %lu lock contested back is %lu\n", *node_id, back_id);
     printf("node %lu registrering with %lu\n", *node_id, back_id);
     compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
     printf("node %lu cas %lu\n", *node_id, *buffer);
