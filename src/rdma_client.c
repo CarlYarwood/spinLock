@@ -8,9 +8,9 @@
 
 pthread_mutex_t *out_lock = NULL;
 char* address[TOTAL_NODES + 1] = {
-    "128.110.219.58",
-    "128.110.219.43",
-    "128.110.219.43"
+    "128.110.219.31",
+    "128.110.219.25",
+    "128.110.219.25"
     // "128.110.219.84",
     // "128.110.219.84",
     // "128.110.219.84",
@@ -536,24 +536,26 @@ int destroy_context(struct c_mcs_ctx* ctx){
 	return ret;
 }
 
-int rdma_write(struct c_mcs_ctx *ctx, int offset) {
+int wake_write(struct c_mcs_ctx *ctx, int offset) {
 	int ret = -1;
     struct ibv_send_wr write_wr, *bad_write_wr = NULL;
     struct ibv_wc write_wc;
     struct ibv_sge write_sge;
 
     write_sge.addr = (uint64_t) (ctx->buffer_mr)->addr;
-    write_sge.length = (uint64_t) (ctx->buffer_mr)->length;
-    write_sge.lkey = (uint64_t)(ctx->buffer_mr)->lkey;
+    write_sge.length = (uint32_t) (ctx->buffer_mr)->length;
+    write_sge.lkey = (uint32_t)(ctx->buffer_mr)->lkey;
 
 	bzero(&write_wr, sizeof(write_wr));
     write_wr.sg_list = &write_sge;
     write_wr.num_sge = 1;
-    write_wr.opcode = IBV_WR_RDMA_WRITE;
+    write_wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 	write_wr.send_flags = IBV_SEND_SIGNALED;
 
+    writer_wr.imm_data = htonl(1);
+
 	write_wr.wr.rdma.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
-    write_wr.wr.rdma.remote_addr = (ctx->server_metadata_attr)->address + sizeof(uint64_t) * offset;
+    write_wr.wr.rdma.remote_addr = (ctx->server_metadata_attr)->address + (sizeof(uint64_t) * offset);
 
 	ret = ibv_post_send((ctx->client_id)->qp, &write_wr, &bad_write_wr);
     if(ret) {
@@ -604,6 +606,19 @@ int copmare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int off
     return 0;
 }
 
+int wait_for_cq(struct ibv_cq* cq){
+    int ne;
+    struct ibv_wc wc;
+    do {
+        ne = ibv_poll_cq(cq, 1, wc);
+    } while(ne == 0);
+    if (ne < 0) {
+        perror("polling error\n");
+        return -1;
+    }
+    return 0;
+}
+
 int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
     printf("node %lu aquire lock\n", *node_id);
     uint64_t expected = 0;
@@ -619,13 +634,16 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
         return 0;
     }
     printf("node %lu lock contested registering next with node %lu\n", *node_id, *buffer);
-    copmare_and_swap(ctx_arr[*buffer], 0, *node_id, NEXT);
+    uint64_t back_id = *buffer;
+    *buffer = *node_id
+    wake_write(ctx_arr[back_id], NEXT);
     printf("node %lu cas response %lu\n", *node_id, *buffer);
     printf("node %lu wait on notify\n", *node_id);
-    while(metadata[NOTIFY] == 0) {
-        // printf("node %lu waiting on Notify\n", *node_id);
-    }
-    printf("node %lu notify release\n", *node_id);
+    do {
+        if(wait_for_cq(ctx_arr[back_id]->cq)){
+            printf("node %lu cq error\n", *node_id);
+        }
+    } while (metadata[NOTIFY] == 0);
     return 0;
 }
 
@@ -640,11 +658,15 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
             return 0;
         }
         printf("node %lu waiting on Next\n", *node_id);
-        while(metadata[NEXT] == 0) {
-        }
+        do {
+            if(wait_for_cq(ctx_arr[bakc_id]->cq)){
+                pritf("node %lu cq error\n", *node_id);
+            }
+        }while(metadata[NEXT] == 0)
     }
     printf("node %lu metadata Next %lu\n", *node_id, metadata[NEXT]);
-    copmare_and_swap(ctx_arr[metadata[NEXT]], 0, 1, NOTIFY);
+    *buffer = 1;
+    wake_write(ctx_arr[metadata[NEXT]], NOTIFY);
     printf("node %lu cas response %lu\n", *node_id, *buffer);
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
