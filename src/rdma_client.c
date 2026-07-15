@@ -632,10 +632,11 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
 	if (metadata[NEXT] == 0) {
         copmare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
         if(*buffer == *node_id) {
+            printf("node %lu lock released, no next", *node_id);
             return 0;
         }
+        printf("node %lu waiting on Next\n", *node_id);
         while(metadata[NEXT] == 0) {
-            printf("node %lu waiting on Next\n", *node_id);
         }
     }
     printf("node %lu metadata Next %lu\n", *node_id, metadata[NEXT]);
