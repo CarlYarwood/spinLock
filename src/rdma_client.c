@@ -678,7 +678,7 @@ int wait_for_cq(struct ibv_cq* cq, float timeout){
     start = clock();
     do {
         end = clock();
-        if (((double)start - end)/CLOCKS_PER_SEC > timeout) {
+        if (((double)(end - start)/CLOCKS_PER_SEC) > timeout) {
             return -1;
         }
         ne = ibv_poll_cq(cq, 1, &wc);
