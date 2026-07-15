@@ -905,7 +905,7 @@ void * rdma_client(void * in) {
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
-	clock_t start, end;
+	// clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
     printf("node id: %lu\n", *node_id);
 
@@ -939,7 +939,7 @@ void * rdma_client(void * in) {
         }
     }
     sleep(10);
-	start = clock();
+	// start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
 		for (int i = 0; i < noncritical_section; i++) {
@@ -951,9 +951,10 @@ void * rdma_client(void * in) {
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
-		for (int i=0; i < critical_section; i++) {
-			noop;
-		}
+        sleep_ms(10)
+		// for (int i=0; i < critical_section; i++) {
+		// 	noop;
+		// }
 		//unlock
 		// b_release = clock();
 		release_lock(ctx_arr, node_id, buffer, metadata);
@@ -961,7 +962,7 @@ void * rdma_client(void * in) {
 
 		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
 	}
-	end = clock();
+	// end = clock();
 
     for (int i = 0; i<TOTAL_NODES + 1; i++) {
         if(i != *node_id) {
@@ -972,7 +973,7 @@ void * rdma_client(void * in) {
 	free(node_id);
 
 	pthread_mutex_lock(out_lock);
-	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
+	// printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
 	pthread_mutex_unlock(out_lock);
 	return NULL;
 }
