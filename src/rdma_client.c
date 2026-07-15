@@ -92,7 +92,7 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
-    struct alert_mr = NULL;
+    struct ibv_mr* alert_mr = NULL;
     struct ibv_mr *buffer_mr = NULL;
     struct ibv_mr *metadata_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
@@ -171,7 +171,7 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
     }
 
     alert_mr = rdma_buffer_register(pd, alert, sizeof(*alert), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_WRITE));
-    if(!alert_mr_mr){
+    if(!alert_mr){
         rdma_error("Server failed to buffer memory region \n");
         rdma_buffer_deregister(alert_mr);
         ibv_destroy_cq(cq);
@@ -558,6 +558,7 @@ int destroy_context(struct c_mcs_ctx* ctx){
 	}
 
 	/* Destroy memory buffers */
+    rdma_buffer_deregister(ctx->alert_mr);
 	rdma_buffer_deregister(ctx->server_metadata_mr);
 	rdma_buffer_deregister(ctx->buffer_mr);
     rdma_buffer_deregister(ctx->metadata_mr);
@@ -586,12 +587,12 @@ int post_receive_alert(struct c_mcs_ctx *ctx) {
 	alert_sge.lkey = (uint32_t) (ctx->alert_mr)->lkey;
 
 	bzero(&alert_wr, sizeof(alert_wr));
-	alert_wr.sg_list = &server_recv_sge;
+	alert_wr.sg_list = &alert_recv_sge;
 	alert_wr.num_sge = 1;
 
     if(ibv_post_recv((ctx->client_id)->qp , &alert_wr, &bad_alert_wr)){
         perror("faild to post receive");
-        reutnr 1;
+        return 1;
     }
     return 0;
 }
@@ -803,7 +804,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
     return 0;
 }
 
-struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *node_id, uint64_t *buffer, uint64_t *metadata) {
+struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *node_id, uint64_t *buffer, uint64_t *metadata, uint32_t *alert) {
 	struct c_mcs_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -843,7 +844,7 @@ struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *nod
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_spin_context(cm_client_id, cm_event_channel, buffer, metadata);
+	ctx = build_client_spin_context(cm_client_id, cm_event_channel, buffer, metadata, alert);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
@@ -940,6 +941,7 @@ int clean_up_context(struct rdma_cm_id* client_id) {
         return -errno;
     }
 
+    rdma_buffer_deregister(ctx->alert_mr);
     rdma_buffer_deregister(ctx->buffer_mr);
     rdma_buffer_deregister(ctx->metadata_mr);
     rdma_buffer_deregister(ctx->server_metadata_mr);
@@ -1110,7 +1112,7 @@ void* rdma_server(void *in) {
                 
                 client_id = cm_event->id;
 
-                ctx = build_server_mcs_context(client_id, metadata, buffer);
+                ctx = build_server_mcs_context(client_id, metadata, buffer, alert);
                 if(!ctx) {
                     rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");
@@ -1173,6 +1175,7 @@ void* rdma_server(void *in) {
 
     pthread_join(*client, NULL);
 
+    free(alert);
     free(buffer);
     free(metadata);
 
