@@ -739,11 +739,11 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
             return 0;
         }
         printf("node %lu error detected reseting lock and incrementing clock\n", *node_id);
-        uint64_t expected
-        do{
+        uint64_t expected;
+        do {
             expected = *buffer;
             compare_and_swap(ctx_arr[SERVER], expected, 0, LOCK);
-        } while(expected != *buffer);
+        }while(expected != *buffer);
         fetch_and_add(ctx_arr[SERVER], CLOCK);
         printf("node %lu lock reset and clock incremented successfully\n", *node_id);
         return 0;
