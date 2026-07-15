@@ -618,6 +618,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
         printf("node %lu lock uncontested\n", *node_id);
         return 0;
     }
+    printf("node %lu lock contested registering next\n");
     copmare_and_swap(ctx_arr[*buffer], 0, *node_id, NEXT);
     printf("node %lu wait on notify\n", *node_id);
     while(metadata[NOTIFY] == 0) {
