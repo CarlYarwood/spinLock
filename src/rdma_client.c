@@ -638,7 +638,7 @@ int fetch_and_add(struct c_mcs_ctx* ctx, int offset) {
     return 0;
 }
 
-int rdma_read(struct c_ticket_ctx *ctx, int offset) {
+int rdma_read(struct c_mcs_ctx *ctx, int offset) {
 	int ret = -1;
     struct ibv_send_wr read_wr, *bad_read_wr = NULL;
     struct ibv_wc read_wc;
