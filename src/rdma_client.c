@@ -552,7 +552,7 @@ int wake_write(struct c_mcs_ctx *ctx, int offset) {
     write_wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 	write_wr.send_flags = IBV_SEND_SIGNALED;
 
-    writer_wr.imm_data = htonl(1);
+    write_wr.imm_data = htonl(1);
 
 	write_wr.wr.rdma.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
     write_wr.wr.rdma.remote_addr = (ctx->server_metadata_attr)->address + (sizeof(uint64_t) * offset);
@@ -606,11 +606,82 @@ int copmare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int off
     return 0;
 }
 
-int wait_for_cq(struct ibv_cq* cq){
+int fetch_and_add(struct c_mcs_ctx* ctx, int offset) {
+    int ret = -1;
+    struct ibv_send_wr cas_wr, *bad_cas_wr = NULL;
+    struct ibv_wc cas_wc;
+    struct ibv_sge cas_sge;
+
+    cas_sge.addr = (uint64_t) (ctx->buffer_mr)->addr;
+    cas_sge.length = (uint64_t) (ctx->buffer_mr)->length;
+    cas_sge.lkey = (uint64_t) (ctx->buffer_mr)->lkey;
+    
+    bzero(&cas_wr, sizeof(cas_wr));
+    cas_wr.sg_list = &cas_sge;
+    cas_wr.num_sge = 1;
+    cas_wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+    cas_wr.wr.atomic.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
+    cas_wr.wr.atomic.remote_addr = (ctx->server_metadata_attr)->address + (sizeof(uint64_t) * offset);
+    cas_wr.wr.atomic.compare_add = 1;
+    cas_wr.send_flags = IBV_SEND_SIGNALED;
+
+    ret = ibv_post_send((ctx->client_id)->qp, &cas_wr, &bad_cas_wr);
+    if(ret) {
+        perror("Failed to send cas\n");
+        return 1;
+    }
+    ret = process_work_completion_events(ctx->comp, &cas_wc, 1);
+    if (ret != 1) {
+        perror("We failed to get 1 work completions\n");
+        return 1;
+    }
+    return 0;
+}
+
+int rdma_read(struct c_ticket_ctx *ctx, int offset) {
+	int ret = -1;
+    struct ibv_send_wr read_wr, *bad_read_wr = NULL;
+    struct ibv_wc read_wc;
+    struct ibv_sge read_sge;
+
+    read_sge.addr = (uint64_t) (ctx->buffer_mr)->addr;
+    read_sge.length = (uint64_t) (ctx->buffer_mr)->length;
+    read_sge.lkey = (uint64_t)(ctx->buffer_mr)->lkey;
+
+	bzero(&read_wr, sizeof(read_wr));
+    read_wr.sg_list = &read_sge;
+    read_wr.num_sge = 1;
+    read_wr.opcode = IBV_WR_RDMA_READ;
+	read_wr.send_flags = IBV_SEND_SIGNALED;
+
+	read_wr.wr.rdma.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
+    read_wr.wr.rdma.remote_addr = (ctx->server_metadata_attr)->address + sizeof(uint64_t) * offset;
+
+	ret = ibv_post_send((ctx->client_id)->qp, &read_wr, &bad_read_wr);
+    if(ret) {
+        perror("Failed to send read\n");
+        return 1;
+    }
+    ret = process_work_completion_events(ctx->comp, &read_wc, 1);
+    if (ret != 1) {
+        perror("We failed to get 1 work completions\n");
+        return 1;
+    }
+    return 0;
+
+}
+
+int wait_for_cq(struct ibv_cq* cq, float timeout){
     int ne;
     struct ibv_wc wc;
+    clock_t start, end;
+    start = clock();
+    end = clock();
     do {
-        ne = ibv_poll_cq(cq, 1, wc);
+        ne = ibv_poll_cq(cq, 1, &wc);
+        if (((double)start - end)/CLOCKS_PER_SEC > timeout) {
+            return -1
+        }
     } while(ne == 0);
     if (ne < 0) {
         perror("polling error\n");
@@ -620,8 +691,10 @@ int wait_for_cq(struct ibv_cq* cq){
 }
 
 int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
-    printf("node %lu aquire lock\n", *node_id);
+    metadata[NEXT] = 0;
+    metadata[NOTIFY] = 0;
     uint64_t expected = 0;
+    uint64_t clock;
     do {
         copmare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
         if (expected == *buffer) {
@@ -630,46 +703,34 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
         expected = *buffer;
     } while(1);
     if (*buffer == 0) {
-        printf("node %lu lock uncontested\n", *node_id);
         return 0;
     }
-    printf("node %lu lock contested registering next with node %lu\n", *node_id, *buffer);
     uint64_t back_id = *buffer;
-    *buffer = *node_id
-    wake_write(ctx_arr[back_id], NEXT);
-    printf("node %lu cas response %lu\n", *node_id, *buffer);
-    printf("node %lu wait on notify\n", *node_id);
+    rdma_read(ctx_arr[SERVER], CLOCK);
+    clock = *buffer;
+    compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
     do {
-        if(wait_for_cq(ctx_arr[back_id]->cq)){
-            printf("node %lu cq error\n", *node_id);
+        if(wait_for_cq(ctx_arr[back_id]->cq, .01)){
+            rdma_read(ctx_arr[SERVER], CLOCK);
+            if(buffer != CLOCK) {
+                acquire_lock(ctx_arr, node_id, buffer, metadata)
+            }
         }
     } while (metadata[NOTIFY] == 0);
     return 0;
 }
 
 int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
-    printf("node %lu release lock\n", *node_id);
 	if (metadata[NEXT] == 0) {
-        printf("node %lu no next registered\n", *node_id);
         copmare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
-        printf("node %lu cas response %lu\n", *node_id, *buffer);
         if(*buffer == *node_id) {
-            printf("node %lu lock released, no next\n", *node_id);
             return 0;
         }
-        printf("node %lu waiting on Next\n", *node_id);
-        do {
-            if(wait_for_cq(ctx_arr[bakc_id]->cq)){
-                pritf("node %lu cq error\n", *node_id);
-            }
-        }while(metadata[NEXT] == 0)
+        fetch_and_add(ctx_arr[SERVER], CLOCK);
+        return 0;
     }
-    printf("node %lu metadata Next %lu\n", *node_id, metadata[NEXT]);
     *buffer = 1;
     wake_write(ctx_arr[metadata[NEXT]], NOTIFY);
-    printf("node %lu cas response %lu\n", *node_id, *buffer);
-    metadata[NEXT] = 0;
-    metadata[NOTIFY] = 0;
 }
 
 struct c_mcs_ctx* mcs_connect(struct sockaddr_in* server_sockaddr, uint64_t *node_id, uint64_t *buffer, uint64_t *metadata) {
