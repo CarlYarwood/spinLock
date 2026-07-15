@@ -709,6 +709,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
     }
     uint64_t back_id = *buffer;
     compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
+    printf("node %lu waiting for notify\n", *node_id);
     do {
         if(wait_for_cq(ctx_arr[back_id]->cq, .01)){
             rdma_read(ctx_arr[SERVER], CLOCK);
