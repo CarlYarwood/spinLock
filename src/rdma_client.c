@@ -721,7 +721,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
             rdma_read(ctx_arr[SERVER], CLOCK);
             if(*buffer != server_clock) {
                 printf("node %lu clock error incrementd re-starting aquire\n", *node_id);
-                acquire_lock(ctx_arr, node_id, buffer, metadata);
+                return acquire_lock(ctx_arr, node_id, buffer, metadata);
             }
         }
     } while (metadata[NOTIFY] == 0);
