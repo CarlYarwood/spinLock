@@ -1103,7 +1103,7 @@ void* rdma_server(void *in) {
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
-                printf("serve RDMA_CM_EVENT_DISCONNECTED");
+                printf("server RDMA_CM_EVENT_DISCONNECTED\n");
                 client_id = cm_event->id;
 
                 if (rdma_ack_cm_event(cm_event)) {
