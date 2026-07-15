@@ -676,12 +676,12 @@ int wait_for_cq(struct ibv_cq* cq, float timeout){
     struct ibv_wc wc;
     clock_t start, end;
     start = clock();
-    end = clock();
     do {
-        ne = ibv_poll_cq(cq, 1, &wc);
+        end = clock();
         if (((double)start - end)/CLOCKS_PER_SEC > timeout) {
             return -1;
         }
+        ne = ibv_poll_cq(cq, 1, &wc);
     } while(ne == 0);
     if (ne < 0) {
         perror("polling error\n");
