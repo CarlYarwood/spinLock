@@ -634,7 +634,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
 	if (metadata[NEXT] == 0) {
         printf("node %lu no next registered\n", *node_id);
         copmare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
-        printf("node %lu cas response %lu", *node_id, *buffer);
+        printf("node %lu cas response %lu\n", *node_id, *buffer);
         if(*buffer == *node_id) {
             printf("node %lu lock released, no next\n", *node_id);
             return 0;
