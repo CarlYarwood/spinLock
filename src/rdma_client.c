@@ -4,7 +4,7 @@
 
 #define noop (void)0
 
-#define TOTAL_NODES 15
+#define TOTAL_NODES 30
 
 char* address[TOTAL_NODES + 1] = {
     "128.110.219.88",
@@ -22,10 +22,40 @@ char* address[TOTAL_NODES + 1] = {
     "128.110.219.89",
     "128.110.219.89",
     "128.110.219.89",
-    "128.110.219.89"
+    "128.110.219.89",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85",
+    "128.110.219.85"
 };
 long port[TOTAL_NODES + 1] = {
     DEFAULT_RDMA_PORT,
+    DEFAULT_RDMA_PORT,
+    DEFAULT_RDMA_PORT + 1,
+    DEFAULT_RDMA_PORT + 2,
+    DEFAULT_RDMA_PORT + 3,
+    DEFAULT_RDMA_PORT + 4,
+    DEFAULT_RDMA_PORT + 5,
+    DEFAULT_RDMA_PORT + 6,
+    DEFAULT_RDMA_PORT + 7,
+    DEFAULT_RDMA_PORT + 8,
+    DEFAULT_RDMA_PORT + 9,
+    DEFAULT_RDMA_PORT + 10,
+    DEFAULT_RDMA_PORT + 11,
+    DEFAULT_RDMA_PORT + 12,
+    DEFAULT_RDMA_PORT + 13,
+    DEFAULT_RDMA_PORT + 14,
     DEFAULT_RDMA_PORT,
     DEFAULT_RDMA_PORT + 1,
     DEFAULT_RDMA_PORT + 2,
