@@ -774,7 +774,6 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
     post_receive_alert(id_arr[back_id]);
 
-    printf("node %lu waiting for notify from %lu\n", *node_id, back_id);
     do {
         if(wait_for_cq(((struct c_s_mcs_ctx *)id_arr[back_id]->context)-> cq, .01)){
             rdma_read(ctx_arr[SERVER], CLOCK);
@@ -783,7 +782,6 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
             }
         }
     } while (metadata[NOTIFY] == 0);
-    printf("node %lu notified lock aquired\n", *node_id);
     return 0;
 }
 
@@ -802,9 +800,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
         return 0;
     }
     *buffer = 1;
-    printf("node %lu notifing node %lu\n", *node_id, metadata[NEXT]);
     wake_write(ctx_arr[metadata[NEXT]], NOTIFY);
-    printf("node %lu notification sent\n", *node_id);
     return 0;
 }
 
@@ -1021,16 +1017,16 @@ void * rdma_client(void * in) {
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
-        usleep(10000);
-		// for (int i=0; i < critical_section; i++) {
-		// 	noop;
-		// }
+        // usleep(10000);
+		for (int i=0; i < critical_section; i++) {
+			noop;
+		}
 		//unlock
 		// b_release = clock();
 		release_lock(ctx_arr, node_id, buffer, metadata);
 		// e_release = clock();
 
-		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
+		printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
 	}
 	// end = clock();
 
