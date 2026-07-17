@@ -775,10 +775,10 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
 
     printf("node %lu waiting for notify from %lu\n", *node_id, back_id);
     do {
-        if(wait_for_cq(((c_s_mcs_ctx *)id_arr[back_id]->context)-> cq, .01)){
+        if(wait_for_cq(((struct c_s_mcs_ctx *)id_arr[back_id]->context)-> cq, .01)){
             rdma_read(ctx_arr[SERVER], CLOCK);
             if(*buffer != server_clock) {
-                return acquire_lock(ctx_arr, node_id, buffer, metadata);
+                return acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata);
             }
         }
     } while (metadata[NOTIFY] == 0);
