@@ -6,7 +6,6 @@
 
 #define TOTAL_NODES 15
 
-pthread_mutex_t *out_lock = NULL;
 char* address[TOTAL_NODES + 1] = {
     "128.110.219.88",
     "128.110.219.85",
@@ -971,7 +970,7 @@ void * rdma_client(void * in) {
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
     struct rdma_cm_id **id_arr = ((struct rdma_client_in *)in)->id_arr;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
-	// clock_t start, end;
+	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
     printf("node id: %lu\n", *node_id);
 
@@ -1005,7 +1004,7 @@ void * rdma_client(void * in) {
         }
     }
     sleep(10);
-	// start = clock();
+	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
 		for (int i = 0; i < noncritical_section; i++) {
@@ -1026,9 +1025,9 @@ void * rdma_client(void * in) {
 		release_lock(ctx_arr, node_id, buffer, metadata);
 		// e_release = clock();
 
-		printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
+		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
 	}
-	// end = clock();
+	end = clock();
 
     for (int i = 0; i<TOTAL_NODES + 1; i++) {
         if(i != *node_id) {
@@ -1038,9 +1037,7 @@ void * rdma_client(void * in) {
 	/* We free the buffers */
 	free(node_id);
 
-	pthread_mutex_lock(out_lock);
-	// printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
-	pthread_mutex_unlock(out_lock);
+	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
 	return NULL;
 }
 
@@ -1209,8 +1206,6 @@ int main(int argc, char** argv) {
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
-	out_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-	pthread_mutex_init(out_lock, NULL);
 	noncritical_section = 1;
 	critical_section = 1;
 	num_aquire = 1;
@@ -1262,10 +1257,8 @@ int main(int argc, char** argv) {
 	for(int i = 0; i < num_threads; i++) {
 		pthread_join(clients[i], NULL);
 	}
-	pthread_mutex_destroy(out_lock);
 	free(client_in);
     free(server_in);
 	free(clients);
-	free(out_lock);
 	return 0;
 }
