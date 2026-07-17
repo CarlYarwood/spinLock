@@ -49,12 +49,14 @@ struct rdma_client_in {
 	int critical_section;
 	int noncritical_section;
 	int num_aquire;
+    struct rdma_cm_id ** id_arr;
     uint64_t *buffer;
     uint64_t *metadata;
     uint32_t *alert;
 };
 
 struct c_s_mcs_ctx {
+    uint64_t* node_id;
     struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
     struct ibv_cq* cq;
@@ -87,7 +89,7 @@ struct c_mcs_ctx {
     struct rdma_buffer_attr* client_metadata_attr;
 };
 
-struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_t *metadata, uint64_t *buffer, uint32_t *alert) {
+struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_t *metadata, uint64_t *buffer, uint64_t* node_id, uint32_t *alert) {
     struct c_s_mcs_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -268,6 +270,7 @@ struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint6
         return NULL;
     }
 
+    (*ctx).node_id = node_id;
     (*ctx).pd = pd;
     (*ctx).comp = comp;
     (*ctx).cq = cq;
@@ -591,7 +594,7 @@ int post_receive_alert(struct c_mcs_ctx *ctx) {
 	alert_wr.num_sge = 1;
 
     if(ibv_post_recv((ctx->client_id)->qp , &alert_wr, &bad_alert_wr)){
-        perror("faild to post receive");
+        perror("faild to post receive\n");
         return 1;
     }
     return 0;
@@ -749,7 +752,7 @@ int wait_for_cq(struct ibv_cq* cq, float timeout){
     return 0;
 }
 
-int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
+int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
     uint64_t expected = 0;
@@ -772,7 +775,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr,uint64_t *node_id, uint64_t *buffer
 
     printf("node %lu waiting for notify from %lu\n", *node_id, back_id);
     do {
-        if(wait_for_cq(ctx_arr[back_id]->cq, .01)){
+        if(wait_for_cq(((c_s_mcs_ctx *)id_arr[back_id]->context)-> cq, .01)){
             rdma_read(ctx_arr[SERVER], CLOCK);
             if(*buffer != server_clock) {
                 return acquire_lock(ctx_arr, node_id, buffer, metadata);
@@ -952,6 +955,7 @@ int clean_up_context(struct rdma_cm_id* client_id) {
         printf("Failed to destroy client protection domain cleanly, %d \n", -errno);
         return -errno;
     }
+    free(ctx->node_id);
     free(ctx->server_metadata_attr);
     free(ctx->client_metadata_attr);
     free(ctx);
@@ -968,6 +972,7 @@ void * rdma_client(void * in) {
 	int critical_section = ((struct rdma_client_in *) in)->critical_section;
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
+    struct rdma_cm_id **id_arr = ((struct rdma_client_in *)in)->id_arr;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	// clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
@@ -1011,7 +1016,7 @@ void * rdma_client(void * in) {
 		}
 		//lock
 		// b_acquire = clock();
-		acquire_lock(ctx_arr, node_id, buffer, metadata);
+		acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata);
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
@@ -1052,6 +1057,12 @@ void* rdma_server(void *in) {
     long port = ((struct rdma_server_in *)in)->port;
     struct rdma_client_in *client_in = ((struct rdma_server_in *)in)->in;
     pthread_t * client = NULL;
+    struct rdma_cm_id ** id_arr;
+    id_arr = (struct rdma_cm_id **) malloc(sizeof(rdma_cm_id *) * (TOTAL_NODES + 1));
+
+    for (int i = 0;  i < (TOTAL_NODES + 1); i++) {
+        id_arr[i] = NULL;
+    }
 
     client = (pthread_t *)malloc(sizeof(pthread_t));
 
@@ -1063,6 +1074,7 @@ void* rdma_server(void *in) {
     client_in->buffer = buffer;
     client_in->metadata = metadata;
     client_in->alert = alert;
+    client_in->id_arr = id_arr;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -1109,10 +1121,14 @@ void* rdma_server(void *in) {
             case RDMA_CM_EVENT_CONNECT_REQUEST :
                 struct c_s_mcs_ctx* ctx = NULL;
                 struct rdma_conn_param conn_param;
+                uint64_t* node_id;
+
+                node_id = (uint64_t *) malloc(sizeof(uint64_t));
                 
                 client_id = cm_event->id;
+                *node_id = *((uint64_t *) cm_event->param.conn.private_data);
 
-                ctx = build_server_mcs_context(client_id, metadata, buffer, alert);
+                ctx = build_server_mcs_context(client_id, metadata, buffer, node_id, alert);
                 if(!ctx) {
                     rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");
@@ -1120,6 +1136,8 @@ void* rdma_server(void *in) {
                 }
 
                 (client_id)->context = (void *)ctx;
+
+                id_arr[*node_id] = client_id;
 
                 if (rdma_ack_cm_event(cm_event)) {
                     rdma_error("Failed to acknowledge the cm event errno: %d \n", -errno);
@@ -1158,6 +1176,7 @@ void* rdma_server(void *in) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return NULL;
 	            }
+                id_arr[(*((c_s_mcs_ctx *)(client_id->context))->node_id)] = NULL;
 
                 if (clean_up_context(client_id)) {
                     perror("failed to cleanup client context");
@@ -1178,6 +1197,7 @@ void* rdma_server(void *in) {
     free(alert);
     free(buffer);
     free(metadata);
+    free(id_arr);
 
 	if (rdma_destroy_id(cm_server_id)) {
 		rdma_error("Failed to destroy server id cleanly, %d \n", -errno);
@@ -1235,6 +1255,7 @@ int main(int argc, char** argv) {
         (&client_in[i])->buffer = NULL;
         (&client_in[i])->metadata = NULL;
         (&client_in[i])->alert = NULL;
+        (&client_in[i])->id_arr = NULL;
         (&server_in[i])->port = DEFAULT_RDMA_PORT + i;
         (&server_in[i])->in = &client_in[i];
         
