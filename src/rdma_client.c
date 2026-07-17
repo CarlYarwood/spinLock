@@ -581,7 +581,8 @@ int destroy_context(struct c_mcs_ctx* ctx){
 	return ret;
 }
 
-int post_receive_alert(struct c_mcs_ctx *ctx) {
+int post_receive_alert(struct rdma_cm_id *client_id) {
+    struct c_s_mcs_ctx * ctx = (struct c_s_mcs_ctx *)client_id->context;
     struct ibv_sge alert_sge;
 	struct ibv_recv_wr alert_wr, *bad_alert_wr = NULL;
 
@@ -593,7 +594,7 @@ int post_receive_alert(struct c_mcs_ctx *ctx) {
 	alert_wr.sg_list = &alert_sge;
 	alert_wr.num_sge = 1;
 
-    if(ibv_post_recv((ctx->client_id)->qp , &alert_wr, &bad_alert_wr)){
+    if(ibv_post_recv(client_id->qp , &alert_wr, &bad_alert_wr)){
         perror("faild to post receive\n");
         return 1;
     }
@@ -771,7 +772,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     }
     uint64_t back_id = *buffer;
     compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
-    post_receive_alert(ctx_arr[back_id]);
+    post_receive_alert(id_arr[back_id]);
 
     printf("node %lu waiting for notify from %lu\n", *node_id, back_id);
     do {
