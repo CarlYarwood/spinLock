@@ -1058,7 +1058,7 @@ void* rdma_server(void *in) {
     struct rdma_client_in *client_in = ((struct rdma_server_in *)in)->in;
     pthread_t * client = NULL;
     struct rdma_cm_id ** id_arr;
-    id_arr = (struct rdma_cm_id **) malloc(sizeof(rdma_cm_id *) * (TOTAL_NODES + 1));
+    id_arr = (struct rdma_cm_id **) malloc(sizeof(struct rdma_cm_id *) * (TOTAL_NODES + 1));
 
     for (int i = 0;  i < (TOTAL_NODES + 1); i++) {
         id_arr[i] = NULL;
@@ -1176,7 +1176,7 @@ void* rdma_server(void *in) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return NULL;
 	            }
-                id_arr[(*((c_s_mcs_ctx *)(client_id->context))->node_id)] = NULL;
+                id_arr[(*((struct c_s_mcs_ctx *)(client_id->context))->node_id)] = NULL;
 
                 if (clean_up_context(client_id)) {
                     perror("failed to cleanup client context");
