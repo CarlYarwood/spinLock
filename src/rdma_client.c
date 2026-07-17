@@ -1240,7 +1240,7 @@ int main(int argc, char** argv) {
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
-    event_manager_lock = (pthread_mutex_t *)mallock(sizeof(pthread_mutex_t));
+    event_manager_lock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(event_manager_lock, NULL);
 	noncritical_section = 1;
 	critical_section = 1;
