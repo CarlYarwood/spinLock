@@ -799,7 +799,7 @@ int reset_qp(struct rdma_cm_id* client_id) {
     
     error = ibv_modify_qp(qp, &attr, IBV_QP_STATE);
     if (error) {
-        fprintf(stderr, "Failed to modify QP to ERR state: %d\n", ret);
+        fprintf(stderr, "Failed to modify QP to ERR state: %d\n", error);
         return -1;
     }
 
