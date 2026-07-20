@@ -806,11 +806,11 @@ int reset_qp(struct rdma_cm_id* client_id) {
     struct ibv_wc wc;
 
     while (1) {
-        ret = ibv_poll_cq(cq, 1, &wc);
-        if (ret < 0) {
+        error = ibv_poll_cq(cq, 1, &wc);
+        if (error < 0) {
             fprintf(stderr, "Error polling CQ\n");
             break;
-        } else if (ret == 0) {
+        } else if (error == 0) {
             break; 
         }
 
