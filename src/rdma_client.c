@@ -788,6 +788,49 @@ int wait_for_cq(struct ibv_cq* cq, float timeout){
     return 0;
 }
 
+int reset_qp(struct rdma_cm_id* client_id) {
+    struct ibv_qp *qp = client_id->qp;
+    struct ibv_cq *cq = ((struct c_s_mcs_ctx *)client_id->context)->cq;
+    struct ibv_qp_attr attr;
+    int error;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state = IBV_QPS_ERR;
+    
+    error = ibv_modify_qp(qp, &attr, IBV_QP_STATE);
+    if (error) {
+        fprintf(stderr, "Failed to modify QP to ERR state: %d\n", ret);
+        return -1;
+    }
+
+    struct ibv_wc wc;
+
+    while (1) {
+        ret = ibv_poll_cq(cq, 1, &wc);
+        if (ret < 0) {
+            fprintf(stderr, "Error polling CQ\n");
+            break;
+        } else if (ret == 0) {
+            break; 
+        }
+
+        if (wc.status == IBV_WC_WR_FLUSH_ERR) {
+            printf(" -> Successfully reclaimed WR ID: %lu (Status: IBV_WC_WR_FLUSH_ERR)\n", wc.wr_id);
+        } else {
+            printf(" -> Polled unexpected completion status: %d for WR ID: %lu\n", wc.status, wc.wr_id);
+        }
+    }
+
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state = IBV_QPS_RESET;
+    error = ibv_modify_qp(qp, &attr, IBV_QP_STATE);
+    if (error) {
+        fprintf(stderr, "Failed to reset QP: %d\n", error);
+        return -1;
+    }
+    return 0;
+}
+
 int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
     // printf("node %lu acquire lock start\n", *node_id);
     metadata[NEXT] = 0;
@@ -819,6 +862,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
             rdma_read(ctx_arr[SERVER], CLOCK);
             if(*buffer != server_clock) {
                 printf("node %lu timed out and error detected\n", *node_id);
+                reset_qp(id_arr[back_id]);
                 return acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata);
             }
         }
