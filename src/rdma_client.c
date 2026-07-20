@@ -788,53 +788,6 @@ int wait_for_cq(struct ibv_cq* cq, float timeout){
     return 0;
 }
 
-int reset_qp(struct rdma_cm_id* client_id) {
-    struct ibv_qp *qp = client_id->qp;
-    struct ibv_cq *cq = ((struct c_s_mcs_ctx *)client_id->context)->cq;
-    struct ibv_qp_attr attr;
-    int error;
-
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state = IBV_QPS_ERR;
-    
-    pthread_mutex_lock(event_manager_lock);
-    error = ibv_modify_qp(qp, &attr, IBV_QP_STATE);
-    if (error) {
-        fprintf(stderr, "Failed to modify QP to ERR state: %d\n", error);
-        pthread_mutex_unlock(event_manager_lock);
-        return -1;
-    }
-
-    struct ibv_wc wc;
-
-    while (1) {
-        error = ibv_poll_cq(cq, 1, &wc);
-        if (error < 0) {
-            fprintf(stderr, "Error polling CQ\n");
-            break;
-        } else if (error == 0) {
-            break; 
-        }
-
-        if (wc.status == IBV_WC_WR_FLUSH_ERR) {
-            printf(" -> Successfully reclaimed WR ID: %lu (Status: IBV_WC_WR_FLUSH_ERR)\n", wc.wr_id);
-        } else {
-            printf(" -> Polled unexpected completion status: %d for WR ID: %lu\n", wc.status, wc.wr_id);
-        }
-    }
-
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state = IBV_QPS_RESET;
-    error = ibv_modify_qp(qp, &attr, IBV_QP_STATE);
-    if (error) {
-        fprintf(stderr, "Failed to reset QP: %d\n", error);
-        pthread_mutex_unlock(event_manager_lock);
-        return -1;
-    }
-    pthread_mutex_unlock(event_manager_lock);
-    return 0;
-}
-
 int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
     // printf("node %lu acquire lock start\n", *node_id);
     metadata[NEXT] = 0;
@@ -858,7 +811,6 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     uint64_t back_id = *buffer;
     // printf("node %lu lock contended joining queue behind node %lu\n", *node_id, back_id);
     compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
-    post_receive_alert(id_arr[back_id]);
     
     // printf("node %lu waiting for notificatoin \n", *node_id);
     do {
@@ -871,6 +823,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
             }
         }
     } while (metadata[NOTIFY] == 0);
+    post_receive_alert(id_arr[back_id]);
     return 0;
 }
 
@@ -1255,6 +1208,8 @@ void* rdma_server(void *in) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return NULL;
 	            }
+
+                post_receive_alert(id_arr[(*((struct c_s_mcs_ctx *)(client_id->context))->node_id)]);
 
                 if(send_server_metadata(client_id)) {
                      perror("Failed to send server metadata \n");
