@@ -822,6 +822,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
             }
         }
     } while (metadata[NOTIFY] == 0);
+    printf("node %lu notifed reposting alert buffer\n", *node_id);
     post_receive_alert(id_arr[back_id]);
     return 0;
 }
