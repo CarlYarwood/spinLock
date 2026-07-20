@@ -797,9 +797,11 @@ int reset_qp(struct rdma_cm_id* client_id) {
     memset(&attr, 0, sizeof(attr));
     attr.qp_state = IBV_QPS_ERR;
     
+    pthread_mutex_lock(event_manager_lock);
     error = ibv_modify_qp(qp, &attr, IBV_QP_STATE);
     if (error) {
         fprintf(stderr, "Failed to modify QP to ERR state: %d\n", error);
+        pthread_mutex_unlock(event_manager_lock);
         return -1;
     }
 
@@ -826,8 +828,10 @@ int reset_qp(struct rdma_cm_id* client_id) {
     error = ibv_modify_qp(qp, &attr, IBV_QP_STATE);
     if (error) {
         fprintf(stderr, "Failed to reset QP: %d\n", error);
+        pthread_mutex_unlock(event_manager_lock);
         return -1;
     }
+    pthread_mutex_unlock(event_manager_lock);
     return 0;
 }
 
