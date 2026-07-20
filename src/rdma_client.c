@@ -1077,6 +1077,7 @@ void * rdma_client(void * in) {
 	}
 	end = clock();
 
+    sleep(10);
     for (int i = 0; i<TOTAL_NODES + 1; i++) {
         if(i != *node_id) {
             mcs_disconnect(ctx_arr[i]);
