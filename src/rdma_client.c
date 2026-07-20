@@ -813,7 +813,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     
     printf("node %lu waiting for notificatoin \n", *node_id);
     do {
-        if(wait_for_cq(((struct c_s_mcs_ctx *)id_arr[back_id]->context)-> cq, .01)){
+        if(wait_for_cq(((struct c_s_mcs_ctx *)id_arr[back_id]->context)-> cq, .001)){
             rdma_read(ctx_arr[SERVER], CLOCK);
             if(*buffer != server_clock) {
                 printf("node %lu timed out and error detected\n", *node_id);
