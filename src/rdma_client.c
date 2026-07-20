@@ -2,8 +2,6 @@
 #include <pthread.h>
 #include "rdma_common.h"
 
-#define noop (void)0
-
 #define TOTAL_NODES 14
 
 pthread_mutex_t *event_manager_lock = NULL;
@@ -119,6 +117,10 @@ struct c_mcs_ctx {
 	struct rdma_buffer_attr* server_metadata_attr;
     struct rdma_buffer_attr* client_metadata_attr;
 };
+
+void noop(volatile int *dummy) {
+    *dummy = *dummy; 
+}
 
 struct c_s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_t *metadata, uint64_t *buffer, uint64_t* node_id, uint32_t *alert) {
     struct c_s_mcs_ctx* ctx;
@@ -1059,7 +1061,7 @@ void * rdma_client(void * in) {
 
 	for (int i = 0; i < num_aquire; i++) {
 		for (int i = 0; i < noncritical_section; i++) {
-			noop;
+			noop(&i);
 		}
 		//lock
 		// b_acquire = clock();
@@ -1069,7 +1071,7 @@ void * rdma_client(void * in) {
 		//work
         // usleep(10000);
 		for (int i=0; i < critical_section; i++) {
-			noop;
+			noop(&i);
 		}
 		//unlock
 		// b_release = clock();
