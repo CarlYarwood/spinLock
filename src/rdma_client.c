@@ -2,9 +2,8 @@
 #include <pthread.h>
 #include "rdma_common.h"
 
-#define noop (void)0
 
-pthread_mutex_t *out_lock = NULL;
+
 pthread_mutex_t *event_manager_lock = NULL;
 
 struct rdma_client_in {
@@ -24,6 +23,10 @@ struct c_ticket_ctx {
 	struct ibv_mr* server_metadata_mr;
 	struct rdma_buffer_attr* server_metadata_attr;
 };
+
+void noop(volatile int *dummy) {
+    *dummy = *dummy; 
+}
 
 struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, uint64_t *response) {
 	struct c_ticket_ctx *ctx = NULL;
@@ -408,7 +411,7 @@ void * rdma_client(void * in) {
 	for (int i = 0; i < num_aquire; i++) {
 		uint64_t ticket;
 		for (int i = 0; i < noncritical_section; i++) {
-			noop;
+			noop(&i);
 		}
 		//lock
 		// b_acquire = clock();
@@ -417,7 +420,7 @@ void * rdma_client(void * in) {
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
 		for (int i=0; i < critical_section; i++) {
-			noop;
+			noop(&i);
 		}
 		//unlock
 		// b_release = clock();
@@ -434,9 +437,7 @@ void * rdma_client(void * in) {
 	/* We free the buffers */
 	free(response);
 
-	pthread_mutex_lock(out_lock);
 	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
-	pthread_mutex_unlock(out_lock);
 	return NULL;
 }
 
@@ -447,8 +448,6 @@ int main(int argc, char** argv) {
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	pthread_t *clients = NULL;
 	event_manager_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-	out_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-	pthread_mutex_init(out_lock, NULL);
 	noncritical_section = 1;
 	critical_section = 1;
 	num_aquire = 1;
@@ -510,11 +509,9 @@ int main(int argc, char** argv) {
 	for(int i = 0; i < num_threads; i++) {
 		pthread_join(clients[i], NULL);
 	}
-	pthread_mutex_destroy(out_lock);
 	pthread_mutex_destroy(event_manager_lock);
 	free(in);
 	free(clients);
-	free(out_lock);
 	free(event_manager_lock);
 	/* Destroy protection domain */
 	
