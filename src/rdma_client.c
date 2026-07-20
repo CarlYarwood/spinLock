@@ -370,7 +370,7 @@ void * rdma_client(void * in) {
 
 	for (int i = 0; i < num_aquire; i++) {
 		for (int i = 0; i < noncritical_section; i++) {
-			noop;
+			noop(&i);
 		}
 		//lock
 		// b_acquire = clock();
@@ -379,7 +379,7 @@ void * rdma_client(void * in) {
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
 		for (int i=0; i < critical_section; i++) {
-			noop;
+			noop(&i);
 		}
 		//unlock
 		// b_release = clock();
