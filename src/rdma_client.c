@@ -818,7 +818,6 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
             rdma_read(ctx_arr[SERVER], CLOCK);
             if(*buffer != server_clock) {
                 printf("node %lu timed out and error detected\n", *node_id);
-                reset_qp(id_arr[back_id]);
                 return acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata);
             }
         }
