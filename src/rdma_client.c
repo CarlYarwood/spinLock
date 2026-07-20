@@ -629,7 +629,7 @@ int post_receive_alert(struct rdma_cm_id *client_id) {
     pthread_mutex_lock(event_manager_lock);
     error = ibv_post_recv(client_id->qp , &alert_wr, &bad_alert_wr);
     if(error){
-        perror("faild to post receive: error %d\n", error);
+        printf("faild to post receive: error %d\n", error);
         return 1;
     }
     pthread_mutex_unlock(event_manager_lock);
