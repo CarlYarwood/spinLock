@@ -830,7 +830,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
         // printf("node %lu no next node detected\n", *node_id);
         compare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
         if(*buffer == *node_id) {
-            printf("node %lu lock released\n", *node_id);
+            // printf("node %lu lock released\n", *node_id);
             return 0;
         }
         // printf("node %lu error detected resetting lock and incrementing clock\n", *node_id);
