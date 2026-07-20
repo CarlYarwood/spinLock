@@ -616,6 +616,7 @@ int post_receive_alert(struct rdma_cm_id *client_id) {
     struct c_s_mcs_ctx * ctx = (struct c_s_mcs_ctx *)client_id->context;
     struct ibv_sge alert_sge;
 	struct ibv_recv_wr alert_wr, *bad_alert_wr = NULL;
+    int error;
 
     alert_sge.addr = (uint64_t) (ctx->alert_mr)->addr;
 	alert_sge.length = (uint32_t) (ctx->alert_mr)->length;
@@ -626,8 +627,9 @@ int post_receive_alert(struct rdma_cm_id *client_id) {
 	alert_wr.num_sge = 1;
 
     pthread_mutex_lock(event_manager_lock);
-    if(ibv_post_recv(client_id->qp , &alert_wr, &bad_alert_wr)){
-        perror("faild to post receive\n");
+    error = ibv_post_recv(client_id->qp , &alert_wr, &bad_alert_wr)
+    if(error){
+        perror("faild to post receive: error %d\n", error);
         return 1;
     }
     pthread_mutex_unlock(event_manager_lock);
