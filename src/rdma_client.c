@@ -863,6 +863,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint6
             printf("node %lu lock released\n", *node_id);
             return 0;
         }
+        printf("node %lu next node registering\n", *node_id);
         
         // printf("node %lu error detected resetting lock and incrementing clock\n", *node_id);
         // uint64_t expected;
@@ -874,10 +875,10 @@ int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint6
         // fetch_and_add(ctx_arr[SERVER], CLOCK);
         // // printf("node %lu clock incremented\n", *node_id);
     }
-    printf("node %lu waiting for metadata next", *node_id);
+    printf("node %lu waiting for metadata next\n", *node_id);
     do {
         if (wait_for_all_cq(id_arr, node_id)) {
-            perror("wait for all cq failed \n");
+            perror("node %lu or all cq failed \n", *node_id);
             return -1;
         }
     } while(metadata[NEXT] == 0);
