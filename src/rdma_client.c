@@ -789,6 +789,29 @@ int wait_for_cq(struct ibv_cq* cq, float timeout){
     }
     return 0;
 }
+int wait_for_all_cq(struct rdma_cm_id ** id_arr, uint64_t *node_id) {
+    int ne;
+    uint64_t cm_id = 0;
+    struct ibv_wc wc;
+    do {
+        ne = 0;
+        for (uint64_t i = 1; i < TOTAL_NODES + 1; i++) {
+            if ( i != *node_id){
+                ne = ibv_poll_cq(((struct c_s_mcs_ctx *)(id_arr[i]->context))->cq, 1, &wc);
+                if(ne != 0){
+                    cm_id = i;
+                    break;
+                }
+            }
+        }
+    } while(ne == 0);
+    if(ne < 0) {
+        perror("polling error\n");
+        return -1;
+    }
+    post_receive_alert(id_arr[cm_id]);
+    return 0;
+}
 
 int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
     // printf("node %lu acquire lock start\n", *node_id);
@@ -812,7 +835,8 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     }
     uint64_t back_id = *buffer;
     // printf("node %lu lock contended joining queue behind node %lu\n", *node_id, back_id);
-    compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
+    *buffer = *node_id;
+    wake_write(ctx_arr[back_id], NEXT);
     
     // printf("node %lu waiting for notificatoin \n", *node_id);
     do {
@@ -825,7 +849,6 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
         }
     } while (metadata[NOTIFY] == 0);
     // printf("node %lu notifed reposting alert buffer\n", *node_id);
-    post_receive_alert(id_arr[back_id]);
     return 0;
 }
 
@@ -838,17 +861,23 @@ int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer
             // printf("node %lu lock released\n", *node_id);
             return 0;
         }
+        
         // printf("node %lu error detected resetting lock and incrementing clock\n", *node_id);
-        uint64_t expected;
-        do {
-            expected = *buffer;
-            compare_and_swap(ctx_arr[SERVER], expected, 0, LOCK);
-        }while(expected != *buffer);
-        // printf("node %lu lock rest\n", *node_id);
-        fetch_and_add(ctx_arr[SERVER], CLOCK);
-        // printf("node %lu clock incremented\n", *node_id);
-        return 0;
+        // uint64_t expected;
+        // do {
+        //     expected = *buffer;
+        //     compare_and_swap(ctx_arr[SERVER], expected, 0, LOCK);
+        // }while(expected != *buffer);
+        // // printf("node %lu lock rest\n", *node_id);
+        // fetch_and_add(ctx_arr[SERVER], CLOCK);
+        // // printf("node %lu clock incremented\n", *node_id);
     }
+    do {
+        if (wait_for_all_cq(id_arr, node_id)) {
+            perror("wait for all cq failed \n");
+            return -1;
+        }
+    } while(metadata[NEXT] == 0);
     // printf("node %lu next node detected node %lu\n", *node_id, metadata[NEXT]);
     *buffer = 1;
     wake_write(ctx_arr[metadata[NEXT]], NOTIFY);
