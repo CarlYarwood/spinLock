@@ -836,7 +836,9 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     uint64_t back_id = *buffer;
     printf("node %lu lock contended joining queue behind node %lu\n", *node_id, back_id);
     *buffer = *node_id;
-    wake_write(ctx_arr[back_id], NEXT);
+    if(wake_write(ctx_arr[back_id], NEXT)){
+        printf("node %lu wake write fail to send to node %lu\n", *node_id, back_id);
+    }
     
     printf("node %lu waiting for notificatoin \n", *node_id);
     do {
