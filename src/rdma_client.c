@@ -878,7 +878,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint6
     printf("node %lu waiting for metadata next\n", *node_id);
     do {
         if (wait_for_all_cq(id_arr, node_id)) {
-            perror("node %lu or all cq failed \n", *node_id);
+            printf("node %lu or all cq failed \n", *node_id);
             return -1;
         }
     } while(metadata[NEXT] == 0);
