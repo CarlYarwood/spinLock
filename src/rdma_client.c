@@ -852,7 +852,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     return 0;
 }
 
-int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
+int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
     // printf("node %lu release_lock start\n", *node_id);
 	if (metadata[NEXT] == 0) {
         // printf("node %lu no next node detected\n", *node_id);
@@ -1104,7 +1104,7 @@ void * rdma_client(void * in) {
 		}
 		//unlock
 		// b_release = clock();
-		release_lock(ctx_arr, node_id, buffer, metadata);
+		release_lock(ctx_arr, id_arr, node_id, buffer, metadata);
 		// e_release = clock();
 
 		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
