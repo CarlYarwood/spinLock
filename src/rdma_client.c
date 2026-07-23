@@ -1152,7 +1152,7 @@ void* rdma_server(void *in) {
     }
 
     client = (pthread_t *)malloc(sizeof(pthread_t));
-    metadata_lock = (pthread_mutex_t *)malloc(sizeof(metadata_lock));
+    metadata_lock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(metadata_lock, NULL);
 
     alert = (uint32_t *)malloc(sizeof(uint32_t));
