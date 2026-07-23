@@ -662,7 +662,7 @@ int wake_write(struct c_mcs_ctx *ctx, int offset, uint64_t *node_id) {
     }
     ret = process_work_completion_events(ctx->comp, &write_wc, 1);
     if (ret != 1) {
-        perror("node %lu We failed to get 1 work completions\n", *node_id);
+        printf("node %lu We failed to get 1 work completions\n", *node_id);
         return 1;
     }
     return 0;
