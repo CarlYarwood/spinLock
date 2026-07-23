@@ -809,6 +809,7 @@ int wait_for_all_cq(struct rdma_cm_id ** id_arr, uint64_t *node_id) {
         perror("polling error\n");
         return -1;
     }
+    printf("node %lu detect alert from node %lu\n", *node_id, cm_id);
     post_receive_alert(id_arr[cm_id]);
     return 0;
 }
@@ -879,7 +880,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint6
     printf("node %lu waiting for metadata next\n", *node_id);
     do {
         if (wait_for_all_cq(id_arr, node_id)) {
-            printf("node %lu or all cq failed \n", *node_id);
+            printf("node %lu wait for all cq failed \n", *node_id);
             return -1;
         }
     } while(metadata[NEXT] == 0);
