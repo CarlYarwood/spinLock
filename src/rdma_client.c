@@ -1144,7 +1144,7 @@ void* rdma_server(void *in) {
     struct rdma_client_in *client_in = ((struct rdma_server_in *)in)->in;
     pthread_t * client = NULL;
     struct rdma_cm_id ** id_arr;
-    pthread_mutex_t *metadata_lock
+    pthread_mutex_t *metadata_lock = NULL;
     id_arr = (struct rdma_cm_id **) malloc(sizeof(struct rdma_cm_id *) * (TOTAL_NODES + 1));
 
     for (int i = 0;  i < (TOTAL_NODES + 1); i++) {
