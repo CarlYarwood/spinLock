@@ -175,6 +175,7 @@ int process_work_completion_events (struct ibv_comp_channel *comp_channel,
 	       }
 	       total_wc += ret;
        } while (total_wc < max_wc); 
+	   printf("total wc %d\n", total_wc);
        debug("%d WC are completed \n", total_wc);
        /* Now we check validity and status of I/O work completions */
        for( i = 0 ; i < total_wc ; i++) {

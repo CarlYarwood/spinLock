@@ -657,7 +657,7 @@ int wake_write(struct c_mcs_ctx *ctx, int offset, uint64_t *node_id) {
 
 	ret = ibv_post_send((ctx->client_id)->qp, &write_wr, &bad_write_wr);
     if(ret) {
-        perror("Failed to send read\n");
+        perror("Failed to send wake write\n");
         return 1;
     }
     ret = process_work_completion_events(ctx->comp, &write_wc, 1);
