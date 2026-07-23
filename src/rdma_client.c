@@ -816,7 +816,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
     uint64_t expected = 0;
-    uint64_t notify = 0
+    uint64_t notify = 0;
     uint64_t server_clock;
     rdma_read(ctx_arr[SERVER], CLOCK);
     server_clock = *buffer;
@@ -843,7 +843,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
             rdma_read(ctx_arr[SERVER], CLOCK);
             if(*buffer != server_clock) {
                 // printf("node %lu timed out and error detected\n", *node_id);
-                return acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata);
+                return acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata, metadata_lock);
             }
         }
         pthread_mutex_lock(metadata_lock);
@@ -857,9 +857,9 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
 
 int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint64_t* node_id, uint64_t *buffer, uint64_t* metadata, pthread_mutex_t* metadata_lock) {
     uint64_t next = 0;
-    pthread_mutex_lock()
+    pthread_mutex_lock(metadata_lock);
     next = metadata[NEXT];
-    pthread_mutex_unlock()
+    pthread_mutex_unlock(metadata_lock);
     printf("node %lu release_lock start\n", *node_id);
 	if (next == 0) {
         printf("node %lu no next node detected\n", *node_id);
