@@ -80,6 +80,7 @@ struct rdma_client_in {
     uint64_t *buffer;
     uint64_t *metadata;
     uint32_t *alert;
+    pthread_mutex_t *metadata_lock;
 };
 
 struct c_s_mcs_ctx {
@@ -810,11 +811,12 @@ int wait_for_all_cq(struct rdma_cm_id ** id_arr, uint64_t *node_id) {
     return 0;
 }
 
-int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata) {
+int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata, pthread_mutex_t * metadata_lock) {
     printf("node %lu acquire lock start\n", *node_id);
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
     uint64_t expected = 0;
+    uint64_t notify = 0
     uint64_t server_clock;
     rdma_read(ctx_arr[SERVER], CLOCK);
     server_clock = *buffer;
@@ -833,9 +835,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     uint64_t back_id = *buffer;
     printf("node %lu lock contended joining queue behind node %lu\n", *node_id, back_id);
     *buffer = *node_id;
-    if(wake_write(ctx_arr[back_id], NEXT, node_id)){
-        printf("node %lu wake write fail to send to node %lu\n", *node_id, back_id);
-    }
+    compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
     
     printf("node %lu waiting for notificatoin \n", *node_id);
     do {
@@ -846,15 +846,22 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
                 return acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata);
             }
         }
-    } while (metadata[NOTIFY] == 0);
+        pthread_mutex_lock(metadata_lock);
+        notify = metadata[NOTIFY];
+        pthread_mutex_unlock(metadata_lock);
+    } while (notify == 0);
     printf("node %lu notifed reposting alert buffer\n", *node_id);
     post_receive_alert(id_arr[back_id]);
     return 0;
 }
 
-int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint64_t* node_id, uint64_t *buffer, uint64_t* metadata) {
+int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint64_t* node_id, uint64_t *buffer, uint64_t* metadata, pthread_mutex_t* metadata_lock) {
+    uint64_t next = 0;
+    pthread_mutex_lock()
+    next = metadata[NEXT];
+    pthread_mutex_unlock()
     printf("node %lu release_lock start\n", *node_id);
-	if (metadata[NEXT] == 0) {
+	if (next == 0) {
         printf("node %lu no next node detected\n", *node_id);
         compare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
         if(*buffer == *node_id) {
@@ -875,15 +882,14 @@ int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint6
     }
     printf("node %lu waiting for metadata next\n", *node_id);
     do {
-        if (wait_for_all_cq(id_arr, node_id)) {
-            printf("node %lu wait for all cq failed \n", *node_id);
-            return -1;
-        }
-    } while(metadata[NEXT] == 0);
-    printf("node %lu next node detected node %lu\n", *node_id, metadata[NEXT]);
+        pthread_mutex_lock(metadata_lock);
+        next = metadata[NEXT];
+        pthread_mutex_unlock(metadata_lock);
+    } while(next == 0);
+    printf("node %lu next node detected node %lu\n", *node_id, next);
     *buffer = 1;
-    wake_write(ctx_arr[metadata[NEXT]], NOTIFY, node_id);
-    printf("node %lu next node %lu notified lock released\n", *node_id, metadata[NEXT]);
+    wake_write(ctx_arr[next], NOTIFY, node_id);
+    printf("node %lu next node %lu notified lock released\n", *node_id, next);
     return 0;
 }
 
@@ -1053,6 +1059,7 @@ void * rdma_client(void * in) {
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
     struct rdma_cm_id **id_arr = ((struct rdma_client_in *)in)->id_arr;
+    pthread_mutex_t metadata_lock = ((struct rdma_client_in *)in)->metadata_lock;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
@@ -1096,7 +1103,7 @@ void * rdma_client(void * in) {
 		}
 		//lock
 		// b_acquire = clock();
-		acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata);
+		acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata, metadata_lock);
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
@@ -1106,7 +1113,7 @@ void * rdma_client(void * in) {
 		}
 		//unlock
 		// b_release = clock();
-		release_lock(ctx_arr, id_arr, node_id, buffer, metadata);
+		release_lock(ctx_arr, id_arr, node_id, buffer, metadata, metadata_lock);
 		// e_release = clock();
 
 		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
@@ -1137,6 +1144,7 @@ void* rdma_server(void *in) {
     struct rdma_client_in *client_in = ((struct rdma_server_in *)in)->in;
     pthread_t * client = NULL;
     struct rdma_cm_id ** id_arr;
+    pthread_mutex_t *metadata_lock
     id_arr = (struct rdma_cm_id **) malloc(sizeof(struct rdma_cm_id *) * (TOTAL_NODES + 1));
 
     for (int i = 0;  i < (TOTAL_NODES + 1); i++) {
@@ -1144,6 +1152,8 @@ void* rdma_server(void *in) {
     }
 
     client = (pthread_t *)malloc(sizeof(pthread_t));
+    metadata_lock = (pthread_mutex_t *)malloc(sizeof(metadata_lock));
+    pthread_mutex_init(metadata_lock, NULL);
 
     alert = (uint32_t *)malloc(sizeof(uint32_t));
     metadata = calloc(2, sizeof(uint64_t));
@@ -1154,6 +1164,7 @@ void* rdma_server(void *in) {
     client_in->metadata = metadata;
     client_in->alert = alert;
     client_in->id_arr = id_arr;
+    client_in->metadata_lock = metadata_lock;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -1274,11 +1285,13 @@ void* rdma_server(void *in) {
     } while(num_conn > 0);
 
     pthread_join(*client, NULL);
+    pthread_mutex_destroy(metadata_lock);
 
     free(alert);
     free(buffer);
     free(metadata);
     free(id_arr);
+    free(metadata_lock);
 
 	if (rdma_destroy_id(cm_server_id)) {
 		rdma_error("Failed to destroy server id cleanly, %d \n", -errno);
@@ -1335,6 +1348,7 @@ int main(int argc, char** argv) {
         (&client_in[i])->metadata = NULL;
         (&client_in[i])->alert = NULL;
         (&client_in[i])->id_arr = NULL;
+        (&client_in[i])->metadata_lock = NULL;
         (&server_in[i])->port = DEFAULT_RDMA_PORT + i;
         (&server_in[i])->in = &client_in[i];
         
