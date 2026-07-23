@@ -634,7 +634,7 @@ int post_receive_alert(struct rdma_cm_id *client_id) {
     return 0;
 }
 
-int wake_write(struct c_mcs_ctx *ctx, int offset) {
+int wake_write(struct c_mcs_ctx *ctx, int offset, uint64_t *node_id) {
 	int ret = -1;
     struct ibv_send_wr write_wr, *bad_write_wr = NULL;
     struct ibv_wc write_wc;
@@ -662,7 +662,7 @@ int wake_write(struct c_mcs_ctx *ctx, int offset) {
     }
     ret = process_work_completion_events(ctx->comp, &write_wc, 1);
     if (ret != 1) {
-        perror("We failed to get 1 work completions\n");
+        perror("node %lu We failed to get 1 work completions\n", *node_id);
         return 1;
     }
     return 0;
@@ -833,7 +833,7 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     uint64_t back_id = *buffer;
     printf("node %lu lock contended joining queue behind node %lu\n", *node_id, back_id);
     *buffer = *node_id;
-    if(wake_write(ctx_arr[back_id], NEXT)){
+    if(wake_write(ctx_arr[back_id], NEXT, node_id)){
         printf("node %lu wake write fail to send to node %lu\n", *node_id, back_id);
     }
     
@@ -882,7 +882,7 @@ int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint6
     } while(metadata[NEXT] == 0);
     printf("node %lu next node detected node %lu\n", *node_id, metadata[NEXT]);
     *buffer = 1;
-    wake_write(ctx_arr[metadata[NEXT]], NOTIFY);
+    wake_write(ctx_arr[metadata[NEXT]], NOTIFY, node_id);
     printf("node %lu next node %lu notified lock released\n", *node_id, metadata[NEXT]);
     return 0;
 }
