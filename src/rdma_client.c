@@ -76,7 +76,6 @@ struct rdma_client_in {
 	int critical_section;
 	int noncritical_section;
 	int num_aquire;
-    struct rdma_cm_id ** id_arr;
     uint64_t *buffer;
     uint64_t *metadata;
     uint32_t *alert;
@@ -613,63 +612,6 @@ int destroy_context(struct c_mcs_ctx* ctx){
 	return ret;
 }
 
-int post_receive_alert(struct rdma_cm_id *client_id) {
-    struct c_s_mcs_ctx * ctx = (struct c_s_mcs_ctx *)client_id->context;
-    struct ibv_sge alert_sge;
-	struct ibv_recv_wr alert_wr, *bad_alert_wr = NULL;
-    int error;
-
-    alert_sge.addr = (uint64_t) (ctx->alert_mr)->addr;
-	alert_sge.length = (uint32_t) (ctx->alert_mr)->length;
-	alert_sge.lkey = (uint32_t) (ctx->alert_mr)->lkey;
-
-	bzero(&alert_wr, sizeof(alert_wr));
-	alert_wr.sg_list = &alert_sge;
-	alert_wr.num_sge = 1;
-
-    error = ibv_post_recv(client_id->qp , &alert_wr, &bad_alert_wr);
-    if(error){
-        printf("faild to post receive: error %d\n", error);
-        return 1;
-    }
-    return 0;
-}
-
-int wake_write(struct c_mcs_ctx *ctx, int offset, uint64_t *node_id) {
-	int ret = -1;
-    struct ibv_send_wr write_wr, *bad_write_wr = NULL;
-    struct ibv_wc write_wc;
-    struct ibv_sge write_sge;
-
-    write_sge.addr = (uint64_t) (ctx->buffer_mr)->addr;
-    write_sge.length = (uint32_t) (ctx->buffer_mr)->length;
-    write_sge.lkey = (uint32_t)(ctx->buffer_mr)->lkey;
-
-	bzero(&write_wr, sizeof(write_wr));
-    write_wr.sg_list = &write_sge;
-    write_wr.num_sge = 1;
-    write_wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
-	write_wr.send_flags = IBV_SEND_SIGNALED;
-
-    write_wr.imm_data = htonl(1);
-
-	write_wr.wr.rdma.rkey = (ctx->server_metadata_attr)->stag.remote_stag;
-    write_wr.wr.rdma.remote_addr = (ctx->server_metadata_attr)->address + (sizeof(uint64_t) * offset);
-
-	ret = ibv_post_send((ctx->client_id)->qp, &write_wr, &bad_write_wr);
-    if(ret) {
-        perror("Failed to send wake write\n");
-        return 1;
-    }
-    ret = process_work_completion_events(ctx->comp, &write_wc, 1);
-    if (ret != 1) {
-        printf("node %lu We failed to get 1 work completions got %d\n", *node_id, ret);
-        return 1;
-    }
-    return 0;
-
-}
-
 int compare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int offset) {
     uint64_t ret = -1;
     struct ibv_send_wr cas_wr, *bad_cas_wr = NULL;
@@ -768,51 +710,7 @@ int rdma_read(struct c_mcs_ctx *ctx, int offset) {
 
 }
 
-int wait_for_cq(struct ibv_cq* cq, float timeout){
-    int ne;
-    struct ibv_wc wc;
-    clock_t start, end;
-    start = clock();
-    do {
-        end = clock();
-        if (((double)(end - start)/CLOCKS_PER_SEC) > timeout) {
-            return -1;
-        }
-        ne = ibv_poll_cq(cq, 1, &wc);
-    } while(ne == 0);
-    if (ne < 0) {
-        perror("polling error\n");
-        return -1;
-    }
-    return 0;
-}
-int wait_for_all_cq(struct rdma_cm_id ** id_arr, uint64_t *node_id) {
-    int ne;
-    uint64_t cm_id = 0;
-    struct ibv_wc wc;
-    do {
-        ne = 0;
-        for (uint64_t i = 1; i < TOTAL_NODES + 1; i++) {
-            if ( i != *node_id){
-                ne = ibv_poll_cq(((struct c_s_mcs_ctx *)(id_arr[i]->context))->cq, 1, &wc);
-                if(ne != 0){
-                    cm_id = i;
-                    break;
-                }
-            }
-        }
-    } while(ne == 0);
-    if(ne < 0) {
-        perror("polling error\n");
-        return -1;
-    }
-    printf("node %lu detect alert from node %lu\n", *node_id, cm_id);
-    post_receive_alert(id_arr[cm_id]);
-    return 0;
-}
-
-int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata, pthread_mutex_t * metadata_lock) {
-    printf("node %lu acquire lock start\n", *node_id);
+int acquire_lock(struct c_mcs_ctx ** ctx_arr, uint64_t *node_id, uint64_t *buffer, uint64_t* metadata, pthread_mutex_t * metadata_lock) {
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
     uint64_t expected = 0;
@@ -820,7 +718,6 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
     uint64_t server_clock;
     rdma_read(ctx_arr[SERVER], CLOCK);
     server_clock = *buffer;
-    printf("node %lu clock read %lu\n", *node_id, server_clock);
     do {
         compare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
         if (expected == *buffer) {
@@ -829,67 +726,35 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, struct rdma_cm_id ** id_arr, uint6
         expected = *buffer;
     } while(1);
     if (*buffer == 0) {
-        printf("node %lu lock aquired no contention\n", *node_id);
         return 0;
     }
-    uint64_t back_id = *buffer;
-    printf("node %lu lock contended joining queue behind node %lu\n", *node_id, back_id);
-    *buffer = *node_id;
-    compare_and_swap(ctx_arr[back_id], 0, *node_id, NEXT);
-    
-    printf("node %lu waiting for notificatoin \n", *node_id);
+
+    compare_and_swap(ctx_arr[*buffer], 0, *node_id, NEXT);
     do {
-        if(wait_for_cq(((struct c_s_mcs_ctx *)id_arr[back_id]->context)-> cq, .001)){
-            rdma_read(ctx_arr[SERVER], CLOCK);
-            if(*buffer != server_clock) {
-                // printf("node %lu timed out and error detected\n", *node_id);
-                return acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata, metadata_lock);
-            }
-        }
         pthread_mutex_lock(metadata_lock);
         notify = metadata[NOTIFY];
         pthread_mutex_unlock(metadata_lock);
     } while (notify == 0);
-    printf("node %lu notifed reposting alert buffer\n", *node_id);
-    post_receive_alert(id_arr[back_id]);
     return 0;
 }
 
-int release_lock(struct c_mcs_ctx** ctx_arr, struct rdma_cm_id ** id_arr,  uint64_t* node_id, uint64_t *buffer, uint64_t* metadata, pthread_mutex_t* metadata_lock) {
+int release_lock(struct c_mcs_ctx** ctx_arr, uint64_t* node_id, uint64_t *buffer, uint64_t* metadata, pthread_mutex_t* metadata_lock) {
     uint64_t next = 0;
     pthread_mutex_lock(metadata_lock);
     next = metadata[NEXT];
     pthread_mutex_unlock(metadata_lock);
-    printf("node %lu release_lock start\n", *node_id);
 	if (next == 0) {
-        printf("node %lu no next node detected\n", *node_id);
         compare_and_swap(ctx_arr[SERVER], *node_id, 0, LOCK);
         if(*buffer == *node_id) {
-            printf("node %lu lock released\n", *node_id);
             return 0;
         }
-        printf("node %lu next node registering\n", *node_id);
-        
-        // printf("node %lu error detected resetting lock and incrementing clock\n", *node_id);
-        // uint64_t expected;
-        // do {
-        //     expected = *buffer;
-        //     compare_and_swap(ctx_arr[SERVER], expected, 0, LOCK);
-        // }while(expected != *buffer);
-        // // printf("node %lu lock rest\n", *node_id);
-        // fetch_and_add(ctx_arr[SERVER], CLOCK);
-        // // printf("node %lu clock incremented\n", *node_id);
     }
-    printf("node %lu waiting for metadata next\n", *node_id);
     do {
         pthread_mutex_lock(metadata_lock);
         next = metadata[NEXT];
         pthread_mutex_unlock(metadata_lock);
     } while(next == 0);
-    printf("node %lu next node detected node %lu\n", *node_id, next);
-    *buffer = 1;
-    wake_write(ctx_arr[next], NOTIFY, node_id);
-    printf("node %lu next node %lu notified lock released\n", *node_id, next);
+    compare_and_swap(ctx_arr[next],0, 1, NOTIFY);
     return 0;
 }
 
@@ -1058,7 +923,6 @@ void * rdma_client(void * in) {
 	int critical_section = ((struct rdma_client_in *) in)->critical_section;
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
-    struct rdma_cm_id **id_arr = ((struct rdma_client_in *)in)->id_arr;
     pthread_mutex_t* metadata_lock = ((struct rdma_client_in *)in)->metadata_lock;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
@@ -1103,7 +967,7 @@ void * rdma_client(void * in) {
 		}
 		//lock
 		// b_acquire = clock();
-		acquire_lock(ctx_arr, id_arr, node_id, buffer, metadata, metadata_lock);
+		acquire_lock(ctx_arr, node_id, buffer, metadata, metadata_lock);
 		// e_acquire = clock();
 		// printf("%f l\n", ((double)(e_acquire-b_acquire)/CLOCKS_PER_SEC));
 		//work
@@ -1113,7 +977,7 @@ void * rdma_client(void * in) {
 		}
 		//unlock
 		// b_release = clock();
-		release_lock(ctx_arr, id_arr, node_id, buffer, metadata, metadata_lock);
+		release_lock(ctx_arr, node_id, buffer, metadata, metadata_lock);
 		// e_release = clock();
 
 		// printf("%f u\n", ((double)(e_release-b_release)/CLOCKS_PER_SEC));
@@ -1163,7 +1027,6 @@ void* rdma_server(void *in) {
     client_in->buffer = buffer;
     client_in->metadata = metadata;
     client_in->alert = alert;
-    client_in->id_arr = id_arr;
     client_in->metadata_lock = metadata_lock;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
@@ -1252,8 +1115,6 @@ void* rdma_server(void *in) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return NULL;
 	            }
-
-                post_receive_alert(id_arr[(*((struct c_s_mcs_ctx *)(client_id->context))->node_id)]);
 
                 if(send_server_metadata(client_id)) {
                      perror("Failed to send server metadata \n");
@@ -1347,7 +1208,6 @@ int main(int argc, char** argv) {
         (&client_in[i])->buffer = NULL;
         (&client_in[i])->metadata = NULL;
         (&client_in[i])->alert = NULL;
-        (&client_in[i])->id_arr = NULL;
         (&client_in[i])->metadata_lock = NULL;
         (&server_in[i])->port = DEFAULT_RDMA_PORT + i;
         (&server_in[i])->in = &client_in[i];
