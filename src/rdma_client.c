@@ -4,8 +4,6 @@
 
 #define TOTAL_NODES 14
 
-pthread_mutex_t *event_manager_lock = NULL;
-
 char* address[TOTAL_NODES + 1] = {
     "10.10.1.1",
     "10.10.1.2",
@@ -628,13 +626,11 @@ int post_receive_alert(struct rdma_cm_id *client_id) {
 	alert_wr.sg_list = &alert_sge;
 	alert_wr.num_sge = 1;
 
-    pthread_mutex_lock(event_manager_lock);
     error = ibv_post_recv(client_id->qp , &alert_wr, &bad_alert_wr);
     if(error){
         printf("faild to post receive: error %d\n", error);
         return 1;
     }
-    pthread_mutex_unlock(event_manager_lock);
     return 0;
 }
 
@@ -1297,8 +1293,6 @@ int main(int argc, char** argv) {
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
-    event_manager_lock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
-    pthread_mutex_init(event_manager_lock, NULL);
 	noncritical_section = 1;
 	critical_section = 1;
 	num_aquire = 1;
