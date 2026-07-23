@@ -1059,7 +1059,7 @@ void * rdma_client(void * in) {
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
     struct rdma_cm_id **id_arr = ((struct rdma_client_in *)in)->id_arr;
-    pthread_mutex_t metadata_lock = ((struct rdma_client_in *)in)->metadata_lock;
+    pthread_mutex_t* metadata_lock = ((struct rdma_client_in *)in)->metadata_lock;
 	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
