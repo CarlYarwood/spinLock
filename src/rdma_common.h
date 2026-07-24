@@ -32,7 +32,6 @@
 #define NOTIFY 1
 
 #define LOCK 0
-#define CLOCK 1
 
 /* Error Macro*/
 #define rdma_error(msg, args...) do {\

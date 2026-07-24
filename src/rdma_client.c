@@ -715,9 +715,6 @@ int acquire_lock(struct c_mcs_ctx ** ctx_arr, uint64_t *node_id, uint64_t *buffe
     metadata[NOTIFY] = 0;
     uint64_t expected = 0;
     uint64_t notify = 0;
-    uint64_t server_clock;
-    rdma_read(ctx_arr[SERVER], CLOCK);
-    server_clock = *buffer;
     do {
         compare_and_swap(ctx_arr[SERVER], expected, *node_id, LOCK);
         if (expected == *buffer) {

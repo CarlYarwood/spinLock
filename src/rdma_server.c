@@ -92,7 +92,7 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
         return NULL;
     }
 
-    lock_mr = rdma_buffer_register(pd, lock, sizeof(uint64_t) * 2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    lock_mr = rdma_buffer_register(pd, lock, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!lock_mr){
         rdma_error("Server failed to create lock memory region \n");
         ibv_destroy_cq(cq);
@@ -240,9 +240,8 @@ int main(int argc, char** argv) {
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
 
-    lock = calloc(2, sizeof(uint64_t));
+    lock = calloc(1, sizeof(uint64_t));
     lock[LOCK] = 0;
-    lock[CLOCK] = 0;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
