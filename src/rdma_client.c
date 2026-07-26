@@ -217,7 +217,7 @@ int copmare_and_swap(struct c_spin_ctx* ctx, uint64_t cmp, uint64_t swap) {
         return 1;
     }
 
-    if (process_work_completion_events(ctx->comp, &cas_wc, 1) != 1) {
+    if (process_work_completion_events(ctx->cq, &cas_wc, 1) != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
     }
@@ -313,7 +313,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	}
 
 	// printf("The client is connected successfully \n");
-	if(process_work_completion_events(ctx->comp, &wc, 1) != 1) {
+	if(process_work_completion_events(ctx->cq, &wc, 1) != 1) {
 		perror("We failed to get 1 work completions \n");
 		return NULL;
 	}

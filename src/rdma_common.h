@@ -123,7 +123,7 @@ void rdma_buffer_deregister(struct ibv_mr *mr);
  * @max_wc: Maximum number of expected work completion (WC) elements. wc must be 
  *          atleast this size.
  */
-int process_work_completion_events(struct ibv_comp_channel *comp_channel, 
+int process_work_completion_events(struct ibv_cq *cq, 
 		struct ibv_wc *wc, 
 		int max_wc);
 
