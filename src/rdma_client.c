@@ -216,7 +216,7 @@ int fetch_and_add(struct c_ticket_ctx* ctx, int offset) {
         perror("Failed to send cas\n");
         return 1;
     }
-    ret = process_work_completion_events(ctx->comp, &cas_wc, 1);
+    ret = process_work_completion_events(ctx->cq, &cas_wc, 1);
     if (ret != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
@@ -248,7 +248,7 @@ int rdma_read(struct c_ticket_ctx *ctx, int offset) {
         perror("Failed to send read\n");
         return 1;
     }
-    ret = process_work_completion_events(ctx->comp, &read_wc, 1);
+    ret = process_work_completion_events(ctx->cq, &read_wc, 1);
     if (ret != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
@@ -354,7 +354,7 @@ struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_chann
 	}
 
 	// printf("The client is connected successfully \n");
-	if(process_work_completion_events(ctx->comp, &wc, 1) != 1) {
+	if(process_work_completion_events(ctx->cq, &wc, 1) != 1) {
 		perror("We failed to get 1 work completions \n");
 		return NULL;
 	}

@@ -140,7 +140,7 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 	    return -errno;
     }
 
-    if (process_work_completion_events((ctx->comp), &wc, 1) != 1) {
+    if (process_work_completion_events((ctx->cq), &wc, 1) != 1) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
     }
