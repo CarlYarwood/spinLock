@@ -337,7 +337,7 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 	    return -errno;
     }
 
-    if (process_work_completion_events((ctx->comp), &wc, 2) != 2) {
+    if (process_work_completion_events(ctx->cq, &wc, 2) != 2) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
     }
@@ -564,7 +564,7 @@ int send_client_metadata(struct c_mcs_ctx *ctx) {
 	    return -errno;
     }
 
-    if (process_work_completion_events((ctx->comp), &wc, 2) != 2) {
+    if (process_work_completion_events(ctx->cq, &wc, 2) != 2) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
     }
@@ -638,7 +638,7 @@ int compare_and_swap(struct c_mcs_ctx* ctx, uint64_t cmp, uint64_t swap, int off
         return 1;
     }
 
-    if (process_work_completion_events(ctx->comp, &cas_wc, 1) != 1) {
+    if (process_work_completion_events(ctx->cq, &cas_wc, 1) != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
     }
@@ -669,7 +669,7 @@ int fetch_and_add(struct c_mcs_ctx* ctx, int offset) {
         perror("Failed to send cas\n");
         return 1;
     }
-    ret = process_work_completion_events(ctx->comp, &cas_wc, 1);
+    ret = process_work_completion_events(ctx->cq, &cas_wc, 1);
     if (ret != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
@@ -701,7 +701,7 @@ int rdma_read(struct c_mcs_ctx *ctx, int offset) {
         perror("Failed to send read\n");
         return 1;
     }
-    ret = process_work_completion_events(ctx->comp, &read_wc, 1);
+    ret = process_work_completion_events(ctx->cq, &read_wc, 1);
     if (ret != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
