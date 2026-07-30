@@ -259,7 +259,7 @@ struct c_mcs_ctx* build_mcs_context(struct rdma_cm_id* client_id, uint64_t *meta
 }
 
 int send_client_metadata(struct rdma_cm_id* client_id) {
-    struct c_s_mcs_ctx * ctx = (struct c_s_mcs_ctx *) client_id->context;
+    struct c_mcs_ctx * ctx = (struct c_mcs_ctx *) client_id->context;
     struct ibv_wc wc;
     struct ibv_sge server_send_sge;
     struct ibv_send_wr server_send_wr, *bad_server_send_wr = NULL;
