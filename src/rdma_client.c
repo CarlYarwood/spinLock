@@ -739,13 +739,13 @@ void* rdma_client(void *in) {
 			noop(&i);
 		}
 		// lock
-		acquire_lock(ctx_arr, node_id, buffer, metadata, metadata_lock);
+		acquire_lock(id_arr, node_id, buffer, metadata, metadata_lock);
 		// work
 		for (int i=0; i < critical_section; i++) {
 			noop(&i);
 		}
 		// unlock
-		release_lock(ctx_arr, node_id, buffer, metadata, metadata_lock);;
+		release_lock(id_arr, node_id, buffer, metadata, metadata_lock);;
 	}
 
 	end = clock();
@@ -793,6 +793,7 @@ void* rdma_client(void *in) {
 
 	for (int i = (*node_id) - 1; i<=0 + 1; i--) {
         mcs_disconnect(id_arr[i], cm_event_channel);
+		id_arr[i] = NULL;
     }
 
     pthread_mutex_destroy(metadata_lock);
