@@ -716,7 +716,7 @@ void* rdma_client(void *in) {
 		return NULL;
 	}
     server_sockaddr.sin_port = htons(port[0]);
-	id_arr[SERVER] = mcs_connect(&server_sockaddr, node_id, buffer, metadata, alert);
+	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, buffer, metadata, alert);
 	sleep(10);
 
 	for (int i = node_id + 1; i < TOTAL_NODES + 1; i++) {
