@@ -652,7 +652,7 @@ void* rdma_client(void *in) {
 
         switch (cm_event->event){
             case RDMA_CM_EVENT_CONNECT_REQUEST :
-                struct c_s_mcs_ctx* ctx = NULL;
+                struct c_mcs_ctx* ctx = NULL;
                 struct rdma_conn_param conn_param;
                 uint64_t* client_node_id;
 
