@@ -515,7 +515,7 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 }
 
 int clean_up_context(struct rdma_cm_id* client_id) {
-    struct c_s_mcs_ctx *ctx = (struct c_s_mcs_ctx *)client_id->context;
+    struct c_mcs_ctx *ctx = (struct c_mcs_ctx *)client_id->context;
     rdma_destroy_qp(client_id);
 
     if (rdma_destroy_id(client_id)) {
