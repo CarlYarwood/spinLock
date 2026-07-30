@@ -66,7 +66,7 @@ void noop(volatile int *dummy) {
 }
 
 struct c_mcs_ctx* build_mcs_context(struct rdma_cm_id* client_id, uint64_t *metadata, uint64_t *buffer, uint64_t* node_id, uint32_t *alert) {
-    struct c_s_mcs_ctx* ctx;
+    struct c_mcs_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
