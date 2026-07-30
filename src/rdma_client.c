@@ -45,7 +45,6 @@ struct rdma_client_in {
 	int critical_section;
 	int noncritical_section;
 	int num_aquire;
-	long port;
 };
 
 struct c_mcs_ctx {
@@ -593,7 +592,6 @@ void* rdma_client(void *in) {
 	struct sockaddr_in client_server_sockaddr, sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
-    long port = ((struct rdma_client_in *)in)->port;
     struct rdma_cm_id ** id_arr;
 	clock_t start, end;
     pthread_mutex_t *metadata_lock = NULL;
@@ -616,7 +614,7 @@ void* rdma_client(void *in) {
 	bzero(&client_server_sockaddr, sizeof client_server_sockaddr);
 	client_server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	client_server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
-	client_server_sockaddr.sin_port = htons(port);
+	client_server_sockaddr.sin_port = htons(port[*node_id]);
 
     cm_event_channel = rdma_create_event_channel();
     if (!cm_event_channel) {
@@ -854,7 +852,6 @@ int main(int argc, char** argv) {
 		(&client_in[i])->critical_section = critical_section;
 		(&client_in[i])->noncritical_section = noncritical_section;
 		(&client_in[i])->num_aquire = num_aquire;
-		(&client_in[i])->port = DEFAULT_RDMA_PORT + i;
         
 		pthread_create(&clients[i], NULL, rdma_client, (void *) &client_in[i]);
 	}
