@@ -707,7 +707,7 @@ void* rdma_client(void *in) {
 		        rdma_ack_cm_event(cm_event);
 		        return NULL;
         }
-    } while(num_conn < node_id - 1);
+    } while(num_conn < (*node_id) - 1);
 
 	bzero(&server_sockaddr, sizeof server_sockaddr);
     server_sockaddr.sin_family = AF_INET;    
@@ -784,12 +784,10 @@ void* rdma_client(void *in) {
 		        rdma_ack_cm_event(cm_event);
 		        return NULL;
 		}
-	} while (num_conn > node_id);
+	} while (num_conn > (*node_id));
 
-	for (int i = node_id - 1; i<=0 + 1; i--) {
-        if(i != *node_id) {
-            mcs_disconnect(id_arr[i], cm_event_channel);
-        }
+	for (int i = (*node_id) - 1; i<=0 + 1; i--) {
+        mcs_disconnect(id_arr[i], cm_event_channel);
     }
 
     pthread_mutex_destroy(metadata_lock);
