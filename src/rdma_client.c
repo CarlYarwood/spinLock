@@ -82,7 +82,7 @@ struct c_mcs_ctx* build_mcs_context(struct rdma_cm_id* client_id, uint64_t *meta
     struct ibv_sge server_recv_sge;
     struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
     
-    ctx = (struct c_s_mcs_ctx*)malloc(sizeof(struct c_s_mcs_ctx));
+    ctx = (struct c_mcs_ctx*)malloc(sizeof(struct c_mcs_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
     client_metadata_attr = (struct rdma_buffer_attr *) malloc(sizeof(struct rdma_buffer_attr));
 
