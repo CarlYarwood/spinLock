@@ -514,7 +514,7 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 	return cm_client_id;
 }
 
-int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel cm_event_channel){
+int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_event_channel){
 	struct rdma_cm_event *cm_event = NULL;
 	int ret = 0;
 	if (rdma_disconnect(client_id)) {
