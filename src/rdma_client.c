@@ -587,7 +587,7 @@ void* rdma_client(void *in) {
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
     uint32_t *alert = NULL;
     int num_conn = 0;
-	struct sockaddr_in client_server_sockaddr, sockaddr_in server_sockaddr;
+	struct sockaddr_in client_server_sockaddr, server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
     struct rdma_cm_id ** id_arr;
