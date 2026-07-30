@@ -432,7 +432,7 @@ int release_lock(struct rdma_cm_id** id_arr, uint64_t* node_id, uint64_t *buffer
     return 0;
 }
 
-struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_event_channel cm_event_channel, uint64_t *node_id, uint64_t *buffer, uint64_t *metadata, uint32_t *alert) {
+struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_event_channel* cm_event_channel, uint64_t *node_id, uint64_t *buffer, uint64_t *metadata, uint32_t *alert) {
 	struct c_mcs_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
