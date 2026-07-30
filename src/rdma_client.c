@@ -719,7 +719,7 @@ void* rdma_client(void *in) {
 	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, buffer, metadata, alert);
 	sleep(10);
 
-	for (int i = node_id + 1; i < TOTAL_NODES + 1; i++) {
+	for (int i = (*node_id) + 1; i < TOTAL_NODES + 1; i++) {
         struct sockaddr_in client_sockaddr;
         bzero(&client_sockaddr, sizeof client_sockaddr);
         client_sockaddr.sin_family = AF_INET;
@@ -728,21 +728,26 @@ void* rdma_client(void *in) {
             return NULL;
         }
         client_sockaddr.sin_port = htons(port[i]);
-        id_arr[i] = mcs_connect(&client_sockaddr, node_id, buffer, metadata, alert);
+        id_arr[i] = mcs_connect(&client_sockaddr, cm_event_channel, node_id, buffer, metadata, alert);
     }
 
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
+		// pre work
 		for (int i = 0; i < noncritical_section; i++) {
 			noop(&i);
 		}
+		// lock
 		acquire_lock(ctx_arr, node_id, buffer, metadata, metadata_lock);
+		// work
 		for (int i=0; i < critical_section; i++) {
 			noop(&i);
 		}
+		// unlock
 		release_lock(ctx_arr, node_id, buffer, metadata, metadata_lock);;
 	}
+
 	end = clock();
 
 	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
