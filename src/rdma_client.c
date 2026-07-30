@@ -775,7 +775,7 @@ void* rdma_client(void *in) {
 		            rdma_error("Failed to acknowledge the cm event %d\n", -errno);
 		            return NULL;
 	            }
-                id_arr[(*((struct c_s_mcs_ctx *)(client_id->context))->node_id)] = NULL;
+                id_arr[(*((struct c_mcs_ctx *)(client_id->context))->node_id)] = NULL;
 
                 if (clean_up_context(client_id)) {
                     perror("failed to cleanup client context");
