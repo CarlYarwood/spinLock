@@ -534,7 +534,7 @@ int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_e
 		//continuing anyways
 	}
 			
-	if(clena_up_context(client_id)) {
+	if(clean_up_context(client_id)) {
 		perror("Failed to detroy context fully");
 		ret = -1;
 	}
