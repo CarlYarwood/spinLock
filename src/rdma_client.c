@@ -514,36 +514,6 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 	return cm_client_id;
 }
 
-int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_event_channel){
-	struct rdma_cm_event *cm_event = NULL;
-	int ret = 0;
-	if (rdma_disconnect(client_id)) {
-		rdma_error("Failed to disconnect, errno: %d \n", -errno);
-		ret = -1;
-		//continuing anyways
-	}
-
-	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
-		perror("Failed to get RDMA_CM_EVENT_DISCONNECTED event, ret = %d\n");
-		ret = -1;
-		//continuing anyways 
-	}
-	if (rdma_ack_cm_event(cm_event)) {
-		rdma_error("Failed to acknowledge cm event, errno: %d\n", -errno);
-		ret = -1;
-		//continuing anyways
-	}
-			
-	if(clean_up_context(client_id)) {
-		perror("Failed to detroy context fully");
-		ret = -1;
-	}
-
-	free(ctx);
-
-	return ret;
-}
-
 int clean_up_context(struct rdma_cm_id* client_id) {
     struct c_s_mcs_ctx *ctx = (struct c_s_mcs_ctx *)client_id->context;
     rdma_destroy_qp(client_id);
@@ -579,6 +549,36 @@ int clean_up_context(struct rdma_cm_id* client_id) {
     free(ctx->client_metadata_attr);
     free(ctx);
     return 0;
+}
+
+int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_event_channel){
+	struct rdma_cm_event *cm_event = NULL;
+	int ret = 0;
+	if (rdma_disconnect(client_id)) {
+		rdma_error("Failed to disconnect, errno: %d \n", -errno);
+		ret = -1;
+		//continuing anyways
+	}
+
+	if (process_rdma_cm_event(cm_event_channel, RDMA_CM_EVENT_DISCONNECTED, &cm_event)) {
+		perror("Failed to get RDMA_CM_EVENT_DISCONNECTED event, ret = %d\n");
+		ret = -1;
+		//continuing anyways 
+	}
+	if (rdma_ack_cm_event(cm_event)) {
+		rdma_error("Failed to acknowledge cm event, errno: %d\n", -errno);
+		ret = -1;
+		//continuing anyways
+	}
+			
+	if(clean_up_context(client_id)) {
+		perror("Failed to detroy context fully");
+		ret = -1;
+	}
+
+	free(ctx);
+
+	return ret;
 }
 
 void* rdma_client(void *in) {
