@@ -576,8 +576,6 @@ int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_e
 		ret = -1;
 	}
 
-	free(ctx);
-
 	return ret;
 }
 
