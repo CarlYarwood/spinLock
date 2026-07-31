@@ -635,7 +635,7 @@ void* rdma_client(void *in) {
 		return NULL;
 	}
 
-    do {
+    while(num_conn < (*node_id) - 1) {
         struct rdma_cm_event *cm_event = NULL;
         struct rdma_cm_id* client_id = NULL;
     
@@ -707,7 +707,7 @@ void* rdma_client(void *in) {
 		        rdma_ack_cm_event(cm_event);
 		        return NULL;
         }
-    } while(num_conn < (*node_id) - 1);
+    }
 
 	bzero(&server_sockaddr, sizeof server_sockaddr);
     server_sockaddr.sin_family = AF_INET;    
