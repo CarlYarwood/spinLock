@@ -693,7 +693,6 @@ void* rdma_client(void *in) {
 	                return NULL;
                 }
 
-                num_conn++;
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
@@ -708,6 +707,7 @@ void* rdma_client(void *in) {
                      perror("Failed to send server metadata \n");
                      return NULL;
                 }
+				num_conn++;
                 break;
 
             default:
