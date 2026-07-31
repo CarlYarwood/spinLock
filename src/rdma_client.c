@@ -2,7 +2,7 @@
 #include <pthread.h>
 #include "rdma_common.h"
 
-#define TOTAL_NODES 50
+#define TOTAL_NODES 40
 
 char* address[TOTAL_NODES + 1] = {
     "10.10.1.1",
@@ -26,11 +26,6 @@ char* address[TOTAL_NODES + 1] = {
     "10.10.1.2",
     "10.10.1.2",
     "10.10.1.2",
-    "10.10.1.2",
-	"10.10.1.2",
-    "10.10.1.2",
-    "10.10.1.2",
-    "10.10.1.2",
     "10.10.1.3",
     "10.10.1.3",
     "10.10.1.3",
@@ -48,11 +43,6 @@ char* address[TOTAL_NODES + 1] = {
 	"10.10.1.3",
     "10.10.1.3",
     "10.10.1.3",
-    "10.10.1.3",
-    "10.10.1.3",
-    "10.10.1.3",
-    "10.10.1.3",
-	"10.10.1.3",
     "10.10.1.3",
     "10.10.1.3",
     "10.10.1.3"
@@ -80,11 +70,6 @@ long port[TOTAL_NODES + 1] = {
     DEFAULT_RDMA_PORT + 17,
     DEFAULT_RDMA_PORT + 18,
     DEFAULT_RDMA_PORT + 19,
-    DEFAULT_RDMA_PORT + 20,
-    DEFAULT_RDMA_PORT + 21,
-	DEFAULT_RDMA_PORT + 22,
-	DEFAULT_RDMA_PORT + 23,
-    DEFAULT_RDMA_PORT + 24,
 	DEFAULT_RDMA_PORT,
     DEFAULT_RDMA_PORT + 1,
     DEFAULT_RDMA_PORT + 2,
@@ -105,11 +90,6 @@ long port[TOTAL_NODES + 1] = {
     DEFAULT_RDMA_PORT + 17,
     DEFAULT_RDMA_PORT + 18,
     DEFAULT_RDMA_PORT + 19,
-    DEFAULT_RDMA_PORT + 20,
-    DEFAULT_RDMA_PORT + 21,
-	DEFAULT_RDMA_PORT + 22,
-	DEFAULT_RDMA_PORT + 23,
-    DEFAULT_RDMA_PORT + 24,
 };
 
 struct rdma_client_in {
