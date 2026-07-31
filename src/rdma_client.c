@@ -642,6 +642,7 @@ void* rdma_client(void *in) {
 		rdma_error("rdma_listen failed to listen on server address, errno: %d ", -errno);
 		return NULL;
 	}
+	sleep(10);
 
     while(num_conn < (*node_id) - 1) {
         struct rdma_cm_event *cm_event = NULL;
