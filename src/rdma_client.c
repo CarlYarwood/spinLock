@@ -537,13 +537,11 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 	uint64_t* c_node_id = (uint64_t *)malloc(sizeof(uint64_t));
 	*c_node_id = client_node_id;
 	
-	printf("node %lu creating client ID for node %lu\n", *node_id, client_node_id);
 	if (rdma_create_id(cm_event_channel, &cm_client_id, NULL, RDMA_PS_TCP)) {
 		rdma_error("Creating cm id failed with errno: %d \n", -errno); 
 		return NULL;
 	}
 
-	printf("node %lu resolving route for node %lu\n", *node_id, client_node_id);
 	if (rdma_resolve_addr(cm_client_id, NULL, (struct sockaddr*) server_sockaddr, 2000)) {
 		rdma_error("Failed to resolve address, errno: %d \n", -errno);
 		return NULL;
@@ -554,7 +552,6 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 		return NULL;
 	}
 
-	printf("node %lu building context for node %lu\n", *node_id, client_node_id);
 	ctx = build_mcs_context(cm_client_id, metadata, buffer, c_node_id, alert);
 	if (!ctx) {
 		perror("Failed to build context\n");
@@ -567,7 +564,6 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 		return NULL;
 	}
 
-	printf("node %lu resolving route for node %lu\n", *node_id, client_node_id);
 	if (rdma_resolve_route(cm_client_id, 2000)) {
 		rdma_error("Failed to resolve route, erno: %d \n", -errno);
 	       return NULL;
@@ -584,9 +580,6 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 		return NULL;
 	}
 
-	
-
-	printf("node %lu connecting to node %lu\n", *node_id, client_node_id);
     bzero(&conn_param, sizeof(conn_param));
 	conn_param.initiator_depth = 3;
 	conn_param.responder_resources = 3;
@@ -609,7 +602,6 @@ struct rdma_cm_id* mcs_connect(struct sockaddr_in* server_sockaddr, struct rdma_
 		return NULL;
 	}
 
-	printf("node %lu sending metadata to node %lu\n", *node_id, client_node_id);
     if(send_client_metadata(cm_client_id)) {
         perror("Failed to send client metadata\n");
         return NULL;
