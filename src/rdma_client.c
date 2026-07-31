@@ -725,7 +725,6 @@ void* rdma_client(void *in) {
 	}
     server_sockaddr.sin_port = htons(port[0]);
 	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, SERVER, buffer, metadata, alert);
-	sleep(10);
 
 	for (int i = (*node_id) + 1; i < TOTAL_NODES + 1; i++) {
         struct sockaddr_in client_sockaddr;
@@ -739,6 +738,8 @@ void* rdma_client(void *in) {
 
         id_arr[i] = mcs_connect(&client_sockaddr, cm_event_channel, node_id, i, buffer, metadata, alert);
     }
+
+	sleep(10);
 
 	start = clock();
 
