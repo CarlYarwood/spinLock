@@ -251,8 +251,10 @@ int send_client_metadata(struct c_spin_ctx* ctx) {
 	    return -errno;
 	}
 
-	if (process_work_completion_events(ctx->cq, &wc, 2) != 2) {
-	    perror("Failed to send server metadata, ret = %d \n");
+	int ret = process_work_completion_events(ctx->cq, &wc, 2);
+	if ( ret != 2) {
+		printf("num wc %d\n", ret);
+	    perror("Failed to send client metadata, ret = %d \n");
 	    return -1;
     }
 	return 0;
