@@ -520,6 +520,7 @@ void * rdma_client(void * in) {
 	end = clock();
 
 	disconnect_from_server(cm_event_channel, ctx);
+	rdma_destroy_event_channel(cm_event_channel);
 	/* We free the buffers */
 	free(response);
 	free((uint64_t *)sync);
@@ -592,7 +593,6 @@ int main(int argc, char** argv) {
 	free(clients);
 	/* Destroy protection domain */
 	
-	rdma_destroy_event_channel(cm_event_channel);
 	// printf("Client resource clean up is complete \n");
 	return 0;
 }
