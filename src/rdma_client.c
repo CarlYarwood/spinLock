@@ -238,7 +238,7 @@ int send_client_metadata(struct c_spin_ctx* ctx) {
 
 	client_send_sge.addr = (uint64_t)(ctx->client_metadata_attr);
 	client_send_sge.length = (uint32_t) sizeof(struct rdma_buffer_attr);
-	client_send_sge.lkey = (uint32_t) (ctx->server_metadata_mr)->lkey;
+	client_send_sge.lkey = (uint32_t) (ctx->client_metadata_mr)->lkey;
 
 	bzero(&client_send_wr, sizeof(client_send_wr));
 	client_send_wr.sg_list = &client_send_sge;
@@ -251,9 +251,7 @@ int send_client_metadata(struct c_spin_ctx* ctx) {
 	    return -errno;
 	}
 
-	int ret = process_work_completion_events(ctx->cq, &wc, 2);
-	if ( ret != 2) {
-		printf("num wc %d\n", ret);
+	if ( process_work_completion_events(ctx->cq, &wc, 2) != 2) {
 	    perror("Failed to send client metadata, ret = %d \n");
 	    return -1;
     }
