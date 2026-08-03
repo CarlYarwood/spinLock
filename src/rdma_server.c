@@ -118,7 +118,7 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
         return NULL;
     }
 
-    client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE));
+    client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(struct rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE));
     if(!client_metadata_mr){
         rdma_error("Server failed to create client metadata \n");
         rdma_buffer_deregister(lock_mr);
@@ -136,8 +136,8 @@ struct s_spin_ctx* build_server_spin_context(struct rdma_cm_id* client_id) {
     server_recv_sge.lkey = (uint32_t) client_metadata_mr->lkey;
 
     bzero(&server_recv_wr, sizeof(server_recv_wr));
-    client_recv_wr.sg_list = &client_recv_sge;
-    client_recv_wr.num_sge = 1;
+    server_recv_wr.sg_list = &server_recv_sge;
+    server_recv_wr.num_sge = 1;
     if(ibv_post_recv(client_id->qp, &server_recv_wr, &bad_server_recv_wr)) {
         rdma_error("Server failed to prepost recv buffer \n");
         rdma_buffer_deregister(lock_mr);
@@ -261,7 +261,7 @@ int rdma_write(struct rdma_cm_id *client_id, int offset) {
 	write_wr.wr.rdma.rkey = (ctx->client_metadata_attr)->stag.remote_stag;
     write_wr.wr.rdma.remote_addr = (ctx->client_metadata_attr)->address + sizeof(uint64_t) * offset;
 
-    if(ibv_post_send(client_id->qp, &read_wr, &bad_read_wr)) {
+    if(ibv_post_send(client_id->qp, &write_wr, &bad_write_wr)) {
         perror("Failed to send read\n");
         return 1;
     }
@@ -404,7 +404,7 @@ int main(int argc, char** argv) {
                      perror("Failed to send server metadata \n");
                      return -1;
                 }
-                id_arr[num_conn] = client_id
+                id_arr[num_conn] = client_id;
                 num_conn++;
                 break;
 
