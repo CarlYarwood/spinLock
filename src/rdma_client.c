@@ -2,12 +2,7 @@
 #include <pthread.h>
 #include "rdma_common.h"
 
-
-
-pthread_mutex_t *event_manager_lock = NULL;
-
 struct rdma_client_in {
-	struct rdma_event_channel *cm_event_channel;
 	struct sockaddr_in server_sockaddr;
 	int critical_section;
 	int noncritical_section;
@@ -477,7 +472,7 @@ void wait_on_sync(volatile uint64_t* sync) {
 
 void * rdma_client(void * in) {
 	struct c_ticket_ctx *ctx = NULL;
-	struct rdma_event_channel *cm_event_channel = ((struct rdma_client_in *) in)->cm_event_channel;
+	struct rdma_event_channel *cm_event_channel = NULL;
 	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
 	uint64_t *node_id = calloc(1, sizeof(uint64_t));
@@ -488,9 +483,13 @@ void * rdma_client(void * in) {
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
 	clock_t start, end;
 
-	pthread_mutex_lock(event_manager_lock);
+	cm_event_channel = rdma_create_event_channel();
+	if (!cm_event_channel) {
+		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
+		return -errno;
+	}
+
 	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, sync);
-	pthread_mutex_unlock(event_manager_lock);
 
 	wait_on_sync(sync);
 
@@ -520,9 +519,7 @@ void * rdma_client(void * in) {
 	}
 	end = clock();
 
-	pthread_mutex_lock(event_manager_lock);
 	disconnect_from_server(cm_event_channel, ctx);
-	pthread_mutex_unlock(event_manager_lock);
 	/* We free the buffers */
 	free(response);
 	free((uint64_t *)sync);
@@ -532,12 +529,10 @@ void * rdma_client(void * in) {
 }
 
 int main(int argc, char** argv) {
-    struct rdma_event_channel *cm_event_channel = NULL;
 	struct rdma_client_in *in = NULL;
 	struct sockaddr_in server_sockaddr;
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	pthread_t *clients = NULL;
-	event_manager_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
 	noncritical_section = 1;
 	critical_section = 1;
 	num_aquire = 1;
@@ -579,16 +574,10 @@ int main(int argc, char** argv) {
 	  server_sockaddr.sin_port = htons(DEFAULT_RDMA_PORT);
 	}
 
-    cm_event_channel = rdma_create_event_channel();
-	if (!cm_event_channel) {
-		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
-		return -errno;
-	}
 	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
 	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
 
 	for (int i = 0; i < num_threads; i++) {
-		(&in[i])->cm_event_channel = cm_event_channel;
 		(&in[i])->server_sockaddr = server_sockaddr;
 		(&in[i])->critical_section = critical_section;
 		(&in[i])->noncritical_section = noncritical_section;
@@ -599,10 +588,8 @@ int main(int argc, char** argv) {
 	for(int i = 0; i < num_threads; i++) {
 		pthread_join(clients[i], NULL);
 	}
-	pthread_mutex_destroy(event_manager_lock);
 	free(in);
 	free(clients);
-	free(event_manager_lock);
 	/* Destroy protection domain */
 	
 	rdma_destroy_event_channel(cm_event_channel);
