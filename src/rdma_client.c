@@ -33,7 +33,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
     struct ibv_mr *response_mr = NULL;
-	struct ibv_mr *sync_mr = NULL
+	struct ibv_mr *sync_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
 	struct ibv_mr *client_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
