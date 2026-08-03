@@ -290,7 +290,7 @@ int main(int argc, char** argv) {
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
     struct rdma_cm_id ** id_arr;
-    id_arr = (struct rdma_cm_id **)malloc(sizeof(struct rdma_cm_id *) + NUM_NODES);
+    id_arr = (struct rdma_cm_id **)malloc(sizeof(struct rdma_cm_id *) * NUM_NODES);
     for (int i = 0; i < NUM_NODES; i++) {
         id_arr[i] = NULL;
     }
