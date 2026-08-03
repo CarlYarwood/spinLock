@@ -266,7 +266,7 @@ int rdma_write(struct rdma_cm_id *client_id, int offset) {
         return 1;
     }
 
-    if (process_work_completion_events(ctx->cq, &read_wc, 1) != 1) {
+    if (process_work_completion_events(ctx->cq, &write_wc, 1) != 1) {
         perror("We failed to get 1 work completions\n");
         return 1;
     }
