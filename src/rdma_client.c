@@ -492,6 +492,8 @@ void * rdma_client(void * in) {
 	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, sync);
 	pthread_mutex_unlock(event_manager_lock);
 
+	wait_on_sync(sync);
+
 	
 	start = clock();
 
