@@ -147,7 +147,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	}
 	debug("Receive buffer pre-posting is successful \n");
 
-	sync_mr = rdma_buffer_register(pd, sync, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC));
+	sync_mr = rdma_buffer_register(pd, (void *)sync, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC));
 	if (!sync_mr) {
 		perror("Failed to setup sync mr: %d \n");
 		rdma_destroy_qp(client_id);
@@ -474,7 +474,7 @@ void * rdma_client(void * in) {
 	/* We free the buffers */
 	free(node_id);
 	free(response);
-	free((int *)sync);
+	free((uint64_t *)sync);
 
 	rdma_destroy_event_channel(cm_event_channel);
 
