@@ -5,37 +5,38 @@ struct s_mcs_ctx {
     struct ibv_comp_channel* comp;
     struct ibv_cq* cq;
     struct ibv_mr* lock_mr;
+    struct ibv_mr* buffer_mr;
     struct ibv_mr* server_metadata_mr;
     struct ibv_mr* client_metadata_mr;
     struct rdma_buffer_attr* server_metadata_attr;
     struct rdma_buffer_attr* client_metadata_attr;
 };
 
-struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_t *lock) {
+struct s_mcs_ctx* build_server_spin_context(struct rdma_cm_id* client_id, uint64_t *lock, uint64_t *buffer) {
     struct s_mcs_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
     struct ibv_mr *lock_mr = NULL;
+    struct ibv_mr *buffer_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
     struct ibv_mr *client_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
-    struct rdma_buffer_attr *server_metadata_attr;
-    struct rdma_buffer_attr *client_metadata_attr;
+    struct rdma_buffer_attr *server_metadata_attr = NULL;
+    struct rdma_buffer_attr *client_metadata_attr = NULL;
     struct rdma_conn_param conn_param;
     struct ibv_sge server_recv_sge;
-    struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
+	struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
     
     ctx = (struct s_mcs_ctx*)malloc(sizeof(struct s_mcs_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
-    client_metadata_attr = (struct rdma_buffer_attr *) malloc(sizeof(struct rdma_buffer_attr));
+    client_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
 
     pd = ibv_alloc_pd(client_id->verbs);
     if (!pd) {
         rdma_error("Failed to allocate a protection domain errno: %d\n", -errno);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
@@ -45,7 +46,6 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
@@ -56,7 +56,6 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
@@ -67,7 +66,6 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
@@ -88,11 +86,10 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
-    lock_mr = rdma_buffer_register(pd, lock, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    lock_mr = rdma_buffer_register(pd, lock, sizeof(*lock), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!lock_mr){
         rdma_error("Server failed to create lock memory region \n");
         ibv_destroy_cq(cq);
@@ -100,7 +97,6 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
@@ -109,51 +105,60 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
     (*server_metadata_attr).stag.remote_stag = (uint32_t)lock_mr->rkey;
     server_metadata_mr = rdma_buffer_register(pd, server_metadata_attr, sizeof(*server_metadata_attr), (IBV_ACCESS_LOCAL_WRITE));
     if(!server_metadata_mr){
-        rdma_error("Server failed to create to hold server metadata \n");
+        rdma_error("Server failed to create server metadata \n");
         rdma_buffer_deregister(lock_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
-
-
-    client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(struct rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE));
-    if(!client_metadata_mr) {
-        rdma_error("Server failed to create to hold server metadata \n");
+    client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(struct rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE));
+    if(!client_metadata_mr){
+        rdma_error("Server failed to create client metadata \n");
+        rdma_buffer_deregister(lock_mr);
         rdma_buffer_deregister(server_metadata_mr);
-        rdma_buffer_deregister(lock_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
         return NULL;
     }
 
-    server_recv_sge.addr = (uint64_t)client_metadata_mr->addr;
-    server_recv_sge.length = (uint32_t)client_metadata_mr->length;
+    server_recv_sge.addr = (uint64_t) client_metadata_mr->addr;
+    server_recv_sge.length = (uint32_t) client_metadata_mr->length;
     server_recv_sge.lkey = (uint32_t) client_metadata_mr->lkey;
 
-    bzero(&server_recv_wr, sizeof(struct ibv_recv_wr));
+    bzero(&server_recv_wr, sizeof(server_recv_wr));
     server_recv_wr.sg_list = &server_recv_sge;
     server_recv_wr.num_sge = 1;
     if(ibv_post_recv(client_id->qp, &server_recv_wr, &bad_server_recv_wr)) {
-        rdma_error("Server failed to create to hold server metadata \n");
-        rdma_buffer_deregister(client_metadata_mr);
-        rdma_buffer_deregister(server_metadata_mr);
+        rdma_error("Server failed to prepost recv buffer \n");
         rdma_buffer_deregister(lock_mr);
+        rdma_buffer_deregister(server_metadata_mr);
+        rdma_buffer_deregister(client_metadata_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
         free(ctx);
         free(server_metadata_attr);
-        free(client_metadata_attr);
+        return NULL;
+    }
+
+    buffer_mr = rdma_buffer_register(pd, buffer, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE));
+    if(!buffer_mr) {
+        rdma_error("Server failed create buffer mr \n");
+        rdma_buffer_deregister(lock_mr);
+        rdma_buffer_deregister(server_metadata_mr);
+        rdma_buffer_deregister(client_metadata_mr);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+        free(ctx);
+        free(server_metadata_attr);
         return NULL;
     }
 
@@ -161,6 +166,7 @@ struct s_mcs_ctx* build_server_mcs_context(struct rdma_cm_id* client_id, uint64_
     (*ctx).comp = comp;
     (*ctx).cq = cq;  
     (*ctx).lock_mr = lock_mr;
+    (*ctx).buffer_mr = buffer_mr;
     (*ctx).server_metadata_mr = server_metadata_mr;
     (*ctx).client_metadata_mr = client_metadata_mr;
     (*ctx).server_metadata_attr = server_metadata_attr;
@@ -191,7 +197,7 @@ int send_server_metadata(struct rdma_cm_id* client_id) {
 	    return -errno;
     }
 
-    if (process_work_completion_events((ctx->cq), &wc, 2) != 2) {
+    if (process_work_completion_events(ctx->cq, &wc, 2) != 2) {
 	    perror("Failed to send server metadata, ret = %d \n");
 	    return -1;
     }
@@ -218,9 +224,9 @@ int clean_up_context(struct rdma_cm_id* client_id) {
         return -errno;
     }
     rdma_buffer_deregister(ctx->lock_mr);
+    rdma_buffer_deregister(ctx->buffer_mr);
     rdma_buffer_deregister(ctx->server_metadata_mr);
     rdma_buffer_deregister(ctx->client_metadata_mr);
-
 
     if (ibv_dealloc_pd(ctx->pd)) {
         printf("Failed to destroy client protection domain cleanly, %d \n", -errno);
@@ -233,15 +239,65 @@ int clean_up_context(struct rdma_cm_id* client_id) {
     return 0;
 }
 
+int rdma_write(struct rdma_cm_id *client_id, int offset) {
+    struct s_mcs_ctx* ctx = (struct s_mcs_ctx *) (client_id->context);
+    struct ibv_send_wr write_wr, *bad_write_wr = NULL;
+    struct ibv_wc write_wc;
+    struct ibv_sge write_sge;
+
+    write_sge.addr = (uint64_t) (ctx->buffer_mr)->addr;
+    write_sge.length = (uint64_t) (ctx->buffer_mr)->length;
+    write_sge.lkey = (uint64_t)(ctx->buffer_mr)->lkey;
+
+	bzero(&write_wr, sizeof(write_wr));
+    write_wr.sg_list = &write_sge;
+    write_wr.num_sge = 1;
+    write_wr.opcode = IBV_WR_RDMA_WRITE;
+	write_wr.send_flags = IBV_SEND_SIGNALED;
+
+	write_wr.wr.rdma.rkey = (ctx->client_metadata_attr)->stag.remote_stag;
+    write_wr.wr.rdma.remote_addr = (ctx->client_metadata_attr)->address + sizeof(uint64_t) * offset;
+
+    if(ibv_post_send(client_id->qp, &write_wr, &bad_write_wr)) {
+        perror("Failed to send read\n");
+        return 1;
+    }
+
+    if (process_work_completion_events(ctx->cq, &write_wc, 1) != 1) {
+        perror("We failed to get 1 work completions\n");
+        return 1;
+    }
+    return 0;
+
+}
+
+int notify_clients(struct rdma_cm_id ** id_arr, uint64_t *buffer) {
+    *buffer = 1;
+    for (int i = 0; i < NUM_NODES ; i++) {
+        if(rdma_write(id_arr[i], SYNC)){
+            printf("Failed to send sync");
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
-    uint64_t *lock = NULL;
     int option, num_conn = 0;
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
+    uint64_t *lock = NULL;
+    uint64_t *buffer = NULL;
+    struct rdma_cm_id ** id_arr;
+    id_arr = (struct rdma_cm_id **)malloc(sizeof(struct rdma_cm_id *) * NUM_NODES);
+    for (int i = 0; i < NUM_NODES; i++) {
+        id_arr[i] = NULL;
+    }
 
+    buffer = (uint64_t *)malloc(sizeof(uint64_t));
     lock = calloc(1, sizeof(uint64_t));
-    lock[LOCK] = 0;
+    *lock = 0;
+    *buffer = 0;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -269,6 +325,9 @@ int main(int argc, char** argv) {
 	}
 
     do {
+        if(num_conn == NUM_NODES) {
+            notify_clients(id_arr, buffer);
+        }
         struct rdma_cm_event *cm_event = NULL;
         struct rdma_cm_id* client_id = NULL;
     
@@ -289,9 +348,8 @@ int main(int argc, char** argv) {
                 struct rdma_conn_param conn_param;
                 
                 client_id = cm_event->id;
-                printf("%lu\n", *((uint64_t *) cm_event->param.conn.private_data));
 
-                ctx = build_server_mcs_context(client_id, lock);
+                ctx = build_server_spin_context(client_id, lock, buffer);
                 if(!ctx) {
                     rdma_ack_cm_event(cm_event);
                     perror("Failed to build client Context\n");
@@ -312,8 +370,6 @@ int main(int argc, char** argv) {
 	                rdma_error("Failed to accept the connection, errno: %d \n", -errno);
 	                return -errno;
                 }
-
-                num_conn++;
                 break;
 
             case RDMA_CM_EVENT_ESTABLISHED :
@@ -328,6 +384,8 @@ int main(int argc, char** argv) {
                      perror("Failed to send server metadata \n");
                      return -1;
                 }
+                id_arr[num_conn] = client_id;
+                num_conn++;
                 break;
 
             case RDMA_CM_EVENT_DISCONNECTED :
@@ -352,6 +410,13 @@ int main(int argc, char** argv) {
         }
     } while(1);
 
+    for (int i = 0; i < NUM_NODES; i++) {
+        id_arr[i] = NULL;
+    }
+
+    free(id_arr);
+    free(buffer);
+    free(lock);
 	if (rdma_destroy_id(cm_server_id)) {
 		rdma_error("Failed to destroy server id cleanly, %d \n", -errno);
 	}

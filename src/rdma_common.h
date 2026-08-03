@@ -26,12 +26,13 @@
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 
-#define SERVER 0
+#define SERVER (0)
 
-#define NEXT 0
-#define NOTIFY 1
+#define NEXT (0)
+#define NOTIFY (1)
+#define SYNC (2)
 
-#define LOCK 0
+#define LOCK (0)
 
 /* Error Macro*/
 #define rdma_error(msg, args...) do {\
@@ -58,6 +59,8 @@
 #define MAX_WR (8)
 /* Default port where the RDMA server is listening */
 #define DEFAULT_RDMA_PORT (20886)
+
+#define NUM_NODES (40)
 
 /* 
  * We use attribute so that compiler does not step in and try to pad the structure.

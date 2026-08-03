@@ -2,9 +2,7 @@
 #include <pthread.h>
 #include "rdma_common.h"
 
-#define TOTAL_NODES 40
-
-char* address[TOTAL_NODES + 1] = {
+char* address[NUM_NODES + 1] = {
     "10.10.1.1",
     "10.10.1.2",
     "10.10.1.2",
@@ -48,7 +46,7 @@ char* address[TOTAL_NODES + 1] = {
     "10.10.1.3"
 };
 
-long port[TOTAL_NODES + 1] = {
+long port[NUM_NODES + 1] = {
     DEFAULT_RDMA_PORT,
     DEFAULT_RDMA_PORT,
     DEFAULT_RDMA_PORT + 1,
@@ -647,9 +645,9 @@ void* rdma_client(void *in) {
     pthread_mutex_t *metadata_lock = NULL;
 
 	*node_id = ((struct rdma_client_in *) in)->node_id;
-    id_arr = (struct rdma_cm_id **) malloc(sizeof(struct rdma_cm_id *) * (TOTAL_NODES + 1));
+    id_arr = (struct rdma_cm_id **) malloc(sizeof(struct rdma_cm_id *) * (NUM_NODES + 1));
 
-    for (int i = 0;  i < (TOTAL_NODES + 1); i++) {
+    for (int i = 0;  i < (NUM_NODES + 1); i++) {
         id_arr[i] = NULL;
     }
 
@@ -771,7 +769,7 @@ void* rdma_client(void *in) {
     server_sockaddr.sin_port = htons(port[0]);
 	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, SERVER, buffer, metadata, alert);
 
-	for (int i = (*node_id) + 1; i < TOTAL_NODES + 1; i++) {
+	for (int i = (*node_id) + 1; i < NUM_NODES + 1; i++) {
         struct sockaddr_in client_sockaddr;
         bzero(&client_sockaddr, sizeof client_sockaddr);
         client_sockaddr.sin_family = AF_INET;
