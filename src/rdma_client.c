@@ -486,7 +486,7 @@ void * rdma_client(void * in) {
 	cm_event_channel = rdma_create_event_channel();
 	if (!cm_event_channel) {
 		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
-		return -errno;
+		return NULL;
 	}
 
 	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, sync);
