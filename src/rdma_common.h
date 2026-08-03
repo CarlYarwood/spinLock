@@ -43,6 +43,10 @@
 
 #endif /* ACN_RDMA_DEBUG */
 
+#define NUM_NODES (30)
+
+#define SYNC (0)
+
 /* Capacity of the completion queue (CQ) */
 #define CQ_CAPACITY (16)
 /* MAX SGE capacity */

@@ -2,10 +2,7 @@
 #include <pthread.h>
 #include "rdma_common.h"
 
-pthread_mutex_t *event_manager_lock = NULL;
-
 struct rdma_client_in {
-	struct rdma_event_channel *cm_event_channel;
 	struct sockaddr_in server_sockaddr;
 	uint64_t node_id;
 	int critical_section;
@@ -19,28 +16,35 @@ struct c_spin_ctx {
     struct ibv_comp_channel* comp;
 	struct ibv_cq* cq;
 	struct ibv_mr* response_mr;
+	struct ibv_mr* sync_mr;
 	struct ibv_mr* server_metadata_mr;
+	struct ibv_mr* client_metadata_mr;
 	struct rdma_buffer_attr* server_metadata_attr;
+	struct rdma_buffer_attr* client_metadata_attr;
 };
 
 void noop(volatile int *dummy) {
     *dummy = *dummy; 
 }
 
-struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *response) {
+struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *response, uint64_t* sync) {
 	struct c_spin_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
     struct ibv_mr *response_mr = NULL;
+	struct ibv_mr *sync_mr = NULL
     struct ibv_mr *server_metadata_mr = NULL;
+	struct ibv_mr *client_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr = NULL;
-	struct ibv_sge server_recv_sge;
-	struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
+	struct rdma_buffer_attr *client_metadata_attr = NULL;
+	struct ibv_sge client_recv_sge;
+	struct ibv_recv_wr client_recv_wr, *bad_client_recv_wr = NULL;
 
 	ctx = (struct c_spin_ctx*)malloc(sizeof(struct c_spin_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
+	client_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
 
 	pd = ibv_alloc_pd(client_id->verbs);
 	if (!pd) {
@@ -113,7 +117,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	if(!server_metadata_mr){
 		rdma_error("Failed to setup the server metadata mr , -ENOMEM\n");
 		rdma_destroy_qp(client_id);
-		rdma_buffer_free(response_mr);
+		rdma_buffer_deregister(response_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
@@ -122,18 +126,18 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 		return NULL;
 	}
 
-	server_recv_sge.addr = (uint64_t) server_metadata_mr->addr;
-	server_recv_sge.length = (uint32_t) server_metadata_mr->length;
-	server_recv_sge.lkey = (uint32_t) server_metadata_mr->lkey;
+	client_recv_sge.addr = (uint64_t) server_metadata_mr->addr;
+	client_recv_sge.length = (uint32_t) server_metadata_mr->length;
+	client_recv_sge.lkey = (uint32_t) server_metadata_mr->lkey;
 
-	bzero(&server_recv_wr, sizeof(server_recv_wr));
-	server_recv_wr.sg_list = &server_recv_sge;
-	server_recv_wr.num_sge = 1;
-	if (ibv_post_recv(client_id->qp , &server_recv_wr, &bad_server_recv_wr)) {
+	bzero(&client_recv_wr, sizeof(client_recv_wr));
+	client_recv_wr.sg_list = &client_recv_sge;
+	client_recv_wr.num_sge = 1;
+	if (ibv_post_recv(client_id->qp , &client_recv_wr, &bad_client_recv_wr)) {
 		perror("Failed to pre-post the receive buffer, errno: %d \n");
 		rdma_destroy_qp(client_id);
-		rdma_buffer_free(server_metadata_mr);
-		rdma_buffer_free(response_mr);
+		rdma_buffer_deregister(server_metadata_mr);
+		rdma_buffer_deregister(response_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
@@ -143,13 +147,48 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	}
 	debug("Receive buffer pre-posting is successful \n");
 
+	sync_mr = rdam_buffer_register(pd, sync, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC));
+	if (!sync_mr) {
+		perror("Failed to setup sync mr: %d \n");
+		rdma_destroy_qp(client_id);
+		rdma_buffer_deregister(server_metadata_mr);
+		rdma_buffer_deregister(response_mr);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+		free(ctx);
+		free(server_metadata_attr);
+		return NULL;
+	}
+
+	client_metadata_attr->address = (uint64_t)sync_mr->addr;
+	client_metadata_attr->length = (uint32_t)sync_mr->length;
+	client_metadata_attr->stag.remote_stag = (uint32_t)sync_mr->rkey;
+	client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE));
+	if(!client_metadata_mr) {
+		perror("Failed to setup client metadata mr: %d \n");
+		rdma_destroy_qp(client_id);
+		rdma_buffer_deregister(client_metadata_mr);
+		rdma_buffer_deregister(server_metadata_mr);
+		rdma_buffer_deregister(response_mr);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+		free(ctx);
+		free(server_metadata_attr);
+		return NULL;
+	}
+
 	ctx->client_id = client_id;
 	ctx->pd = pd;
 	ctx->comp = comp;
 	ctx->cq = cq;
 	ctx->response_mr = response_mr;
+	ctx->sync_mr = sync_mr;
 	ctx->server_metadata_mr = server_metadata_mr;
+	ctx->client_metadata_mr = client_metadata_mr;
 	ctx->server_metadata_attr = server_metadata_attr;
+	ctx->client_metadata_attr = client_metadata_attr;
 
 	return ctx;
 }
@@ -175,6 +214,8 @@ int destroy_context(struct c_spin_ctx* ctx){
 	}
 
 	/* Destroy memory buffers */
+	rdma_buffer_deregister(ctx->client_metadata_mr);
+	rdma_buffer_deregister(ctx->sync_mr);
 	rdma_buffer_deregister(ctx->server_metadata_mr);
 	rdma_buffer_deregister(ctx->response_mr);
 
@@ -184,9 +225,37 @@ int destroy_context(struct c_spin_ctx* ctx){
 		// we continue anyways;
 	}
 
+	free(ctx->client_metadata_attr);
 	free(ctx->server_metadata_attr);
 
 	return ret;
+}
+
+int send_client_metadata(struct c_spin_ctx* ctx) {
+	struct ibv_wc wc;
+	struct ibv_sge client_send_sge;
+	struct ibv_send_wr client_send_wr, *bad_client_send_wr = NULL;
+
+	client_send_sge.addr = (uint64_t)(ctx->client_metadata_attr);
+	client_send_sge.length = (uint32_t) sizeof(*struct rdma_buffer_attr);
+	client_send_sge.lkey = (uint32_t) (ctx->server_metadata_mr)->lkey;
+
+	bzer(&client_send_wr, sizeof(client_send_wr));
+	client_send_wr.sg_list = &client_send_sge;
+	client_send_wr.num_sge = 1;
+	client_send_wr.opcode = IBV_WR_SEND;
+	client_send_wr.send_flags = IBV_SEND_SIGNALED;
+
+	if(ibv_post_send((ctx->client_id)->qp, &client_send_wr, &bad_client_send_wr)){
+		rdma_error("Posting of client metdata failed, errno: %d \n", -errno);
+	    return -errno;
+	}
+
+	if (process_work_completion_events(ctx->cq, &wc, 2) != 2) {
+	    perror("Failed to send server metadata, ret = %d \n");
+	    return -1;
+    }
+	return 0;
 }
 
 
@@ -241,7 +310,7 @@ int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) 
 	return 0;
 }
 
-struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response) {
+struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *sync) {
 	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -274,7 +343,7 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_spin_context(cm_client_id, response);
+	ctx = build_client_spin_context(cm_client_id, response, sync);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
@@ -312,9 +381,8 @@ struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel
 		return NULL;
 	}
 
-	// printf("The client is connected successfully \n");
-	if(process_work_completion_events(ctx->cq, &wc, 1) != 1) {
-		perror("We failed to get 1 work completions \n");
+	if(send_client_metadata(ctx)) {
+		perror("Failed to send client metadata.\n");
 		return NULL;
 	}
 
@@ -350,24 +418,36 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 	return ret;
 }
 
+void wait_on_sync(volatile uint64_t* sync) {
+	do {} while(*sync == 0);
+}
+
 void * rdma_client(void * in) {
 	struct c_spin_ctx *ctx = NULL;
-	struct rdma_event_channel *cm_event_channel = ((struct rdma_client_in *) in)->cm_event_channel;
+	struct rdma_event_channel *cm_event_channel = NULL;
 	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
 	uint64_t *node_id = calloc(1, sizeof(uint64_t));
 	int critical_section = ((struct rdma_client_in *) in)->critical_section;
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
-	// clock_t b_acquire, e_acquire, b_release, e_release;
+	volatile uint64_t *sync = NULL;
+	sync = (uint64_t *)malloc(sizeof(uint64_t));
+	*sync = 0;
 	clock_t start, end;
 	*node_id = ((struct rdma_client_in *) in)->node_id;
-	
-	pthread_mutex_lock(event_manager_lock);
-	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response);
-	pthread_mutex_unlock(event_manager_lock);
-	start = clock();
 
+	cm_event_channel = rdma_create_event_channel();
+	if (!cm_event_channel) {
+		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
+		return -errno;
+	}
+	
+	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, sync);
+
+	wait_on_sync(sync);
+
+	start = clock();
 	for (int i = 0; i < num_aquire; i++) {
 		for (int i = 0; i < noncritical_section; i++) {
 			noop(&i);
@@ -390,25 +470,24 @@ void * rdma_client(void * in) {
 	}
 	end = clock();
 
-	pthread_mutex_lock(event_manager_lock);
 	disconnect_from_server(cm_event_channel, ctx);
-	pthread_mutex_unlock(event_manager_lock);
 	/* We free the buffers */
 	free(node_id);
 	free(response);
+	free(sync);
+
+	rdma_destroy_event_channel(cm_event_channel);
 
 	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
 	return NULL;
 }
 
 int main(int argc, char** argv) {
-    struct rdma_event_channel *cm_event_channel = NULL;
 	struct rdma_client_in *in = NULL;
 	struct sockaddr_in server_sockaddr;
     int option, noncritical_section, critical_section, num_aquire, num_threads;
 	uint64_t id;
 	pthread_t *clients = NULL;
-	event_manager_lock = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
 	noncritical_section = 1;
 	critical_section = 1;
 	num_aquire = 1;
@@ -450,20 +529,13 @@ int main(int argc, char** argv) {
 		}
 	}
 	if (!server_sockaddr.sin_port) {
-	  /* no port provided, use the default port */
 	  server_sockaddr.sin_port = htons(DEFAULT_RDMA_PORT);
 	}
 
-    cm_event_channel = rdma_create_event_channel();
-	if (!cm_event_channel) {
-		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
-		return -errno;
-	}
 	clients = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
 	in = (struct rdma_client_in *)malloc(sizeof(struct rdma_client_in) * num_threads);
 
 	for (int i = 0; i < num_threads; i++) {
-		(&in[i])->cm_event_channel = cm_event_channel;
 		(&in[i])->server_sockaddr = server_sockaddr;
 		(&in[i])->node_id = id + i;
 		(&in[i])->critical_section = critical_section;
@@ -475,13 +547,7 @@ int main(int argc, char** argv) {
 	for(int i = 0; i < num_threads; i++) {
 		pthread_join(clients[i], NULL);
 	}
-	pthread_mutex_destroy(event_manager_lock);
 	free(in);
 	free(clients);
-	free(event_manager_lock);
-	/* Destroy protection domain */
-	
-	rdma_destroy_event_channel(cm_event_channel);
-	// printf("Client resource clean up is complete \n");
 	return 0;
 }
