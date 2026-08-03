@@ -54,6 +54,10 @@
 /* Default port where the RDMA server is listening */
 #define DEFAULT_RDMA_PORT (20886)
 
+#define NUM_NODES (30)
+
+#define SYNC (0)
+
 /* 
  * We use attribute so that compiler does not step in and try to pad the structure.
  * We use this structure to exchange information between the server and the client. 

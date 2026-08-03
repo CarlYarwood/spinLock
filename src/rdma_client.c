@@ -19,35 +19,43 @@ struct c_ticket_ctx {
 	struct ibv_pd* pd;
     struct ibv_comp_channel* comp;
 	struct ibv_cq* cq;
+	struct ibv_mr* sync_mr;
 	struct ibv_mr* response_mr;
 	struct ibv_mr* server_metadata_mr;
+	struct ibv_mr* client_metadata_mr;
 	struct rdma_buffer_attr* server_metadata_attr;
+	struct rdma_buffer_attr* client_metadata_attr;
 };
 
 void noop(volatile int *dummy) {
     *dummy = *dummy; 
 }
 
-struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, uint64_t *response) {
+struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, uint64_t *response, volatile uint64_t sync) {
 	struct c_ticket_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
     struct ibv_cq* cq = NULL;
+	struct ibv_mr *sync_mr = NULL;
     struct ibv_mr *response_mr = NULL;
     struct ibv_mr *server_metadata_mr = NULL;
+	struct ibv_mr *client_metadata_mr = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct rdma_buffer_attr *server_metadata_attr = NULL;
+	struct rdma_buffer_attr *client_metadata_attr = NULL;
 	struct ibv_sge server_recv_sge;
 	struct ibv_recv_wr server_recv_wr, *bad_server_recv_wr = NULL;
 
 	ctx = (struct c_ticket_ctx*)malloc(sizeof(struct c_ticket_ctx));
     server_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
+	client_metadata_attr = (struct rdma_buffer_attr *)malloc(sizeof(struct rdma_buffer_attr));
 
 	pd = ibv_alloc_pd(client_id->verbs);
 	if (!pd) {
 		rdma_error("Failed to alloc pd, errno: %d \n", -errno);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 		return NULL;
 	}
     comp = ibv_create_comp_channel(client_id->verbs);
@@ -56,6 +64,7 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
 		ibv_dealloc_pd(pd);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 	    return NULL;
 	}
 
@@ -66,6 +75,7 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
         ibv_dealloc_pd(pd);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 		return NULL;
 	}
 
@@ -76,6 +86,7 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
         ibv_dealloc_pd(pd);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 		return NULL;
 	}
     bzero(&qp_init_attr, sizeof qp_init_attr);
@@ -95,6 +106,7 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
         ibv_dealloc_pd(pd);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 	    return NULL;
 	}
 
@@ -107,6 +119,7 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
         ibv_dealloc_pd(pd);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 		return NULL;
 	}
 
@@ -114,12 +127,13 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
 	if(!server_metadata_mr){
 		rdma_error("Failed to setup the server metadata mr , -ENOMEM\n");
 		rdma_destroy_qp(client_id);
-		rdma_buffer_free(response_mr);
+		rdma_buffer_deregister(response_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 		return NULL;
 	}
 
@@ -133,24 +147,62 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
 	if (ibv_post_recv(client_id->qp , &server_recv_wr, &bad_server_recv_wr)) {
 		perror("Failed to pre-post the receive buffer, errno: %d \n");
 		rdma_destroy_qp(client_id);
-		rdma_buffer_free(server_metadata_mr);
-		rdma_buffer_free(response_mr);
+		rdma_buffer_deregister(server_metadata_mr);
+		rdma_buffer_deregister(response_mr);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp);
         ibv_dealloc_pd(pd);
 		free(ctx);
 		free(server_metadata_attr);
+		free(client_metadata_attr);
 		return NULL;
 	}
 	debug("Receive buffer pre-posting is successful \n");
+
+	sync_mr = rdma_buffer_register(pd, (void *) sync, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC));
+	if(!sync_mr) {
+		perror("Failed to register sync, errno: %d \n");
+		rdma_destroy_qp(client_id);
+		rdma_buffer_deregister(server_metadata_mr);
+		rdma_buffer_deregister(response_mr);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+		free(ctx);
+		free(server_metadata_attr);
+		free(client_metadata_attr);
+		return NULL;
+	}
+
+	client_metadata_attr->address = (uint64_t)sync_mr->addr;
+	client_metadata_attr->length = (uint32_t)sync_mr->length;
+	client_metadata_attr->stag.remote_stag = (uint32_t)sync_mr->rkey;
+	client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(struct rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE));
+	if(!client_metadata_mr) {
+		perror("Failed to register client metadata, errno: %d \n");
+		rdma_destroy_qp(client_id);
+		rdma_buffer_deregister(client_metadata_mr)
+		rdma_buffer_deregister(server_metadata_mr);
+		rdma_buffer_deregister(response_mr);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp);
+        ibv_dealloc_pd(pd);
+		free(ctx);
+		free(server_metadata_attr);
+		free(client_metadata_attr);
+		return NULL;
+	}
 
 	ctx->client_id = client_id;
 	ctx->pd = pd;
 	ctx->comp = comp;
 	ctx->cq = cq;
+	ctx->sync_mr = sync_mr;
 	ctx->response_mr = response_mr;
 	ctx->server_metadata_mr = server_metadata_mr;
+	ctx->client_metadata_mr = client_metadata_mr;
 	ctx->server_metadata_attr = server_metadata_attr;
+	ctx->client_metadata_attr = client_metadata_attr;
 
 	return ctx;
 }
@@ -177,7 +229,9 @@ int destroy_context(struct c_ticket_ctx* ctx){
 
 	/* Destroy memory buffers */
 	rdma_buffer_deregister(ctx->server_metadata_mr);
+	rdma_buffer_deregister(ctx->client_metadata_mr);
 	rdma_buffer_deregister(ctx->response_mr);
+	rdma_buffer_deregister(ctx->sync_mr);
 
 	if (ibv_dealloc_pd(ctx->pd)) {
 		rdma_error("Failed to destroy client protection domain cleanly, %d \n", -errno);
@@ -186,11 +240,37 @@ int destroy_context(struct c_ticket_ctx* ctx){
 	}
 
 	free(ctx->server_metadata_attr);
+	free(ctx->client_metadata_attr);
 
 	return ret;
 }
 
+int send_client_metadata(struct c_spin_ctx* ctx) {
+	struct ibv_wc wc;
+	struct ibv_sge client_send_sge;
+	struct ibv_send_wr client_send_wr, *bad_client_send_wr = NULL;
 
+	client_send_sge.addr = (uint64_t)(ctx->client_metadata_attr);
+	client_send_sge.length = (uint32_t) sizeof(struct rdma_buffer_attr);
+	client_send_sge.lkey = (uint32_t) (ctx->client_metadata_mr)->lkey;
+
+	bzero(&client_send_wr, sizeof(client_send_wr));
+	client_send_wr.sg_list = &client_send_sge;
+	client_send_wr.num_sge = 1;
+	client_send_wr.opcode = IBV_WR_SEND;
+	client_send_wr.send_flags = IBV_SEND_SIGNALED;
+
+	if(ibv_post_send((ctx->client_id)->qp, &client_send_wr, &bad_client_send_wr)){
+		rdma_error("Posting of client metdata failed, errno: %d \n", -errno);
+	    return -errno;
+	}
+
+	if ( process_work_completion_events(ctx->cq, &wc, 2) != 2) {
+	    perror("Failed to send client metadata, ret = %d \n");
+	    return -1;
+    }
+	return 0;
+}
 
 int fetch_and_add(struct c_ticket_ctx* ctx, int offset) {
     int ret = -1;
@@ -282,7 +362,8 @@ int release_lock(struct c_ticket_ctx* ctx, uint64_t ticket, uint64_t *response) 
     // printf("de-latch successful\n");
 	return 0;
 }
-struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response) {
+
+struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, volatile uint64_t* sync) {
 	struct c_ticket_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -315,7 +396,7 @@ struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_chann
 	}
 	debug("waiting for cm event: RDMA_CM_EVENT_ROUTE_RESOLVED\n");
 
-	ctx = build_client_ticket_context(cm_client_id, response);
+	ctx = build_client_ticket_context(cm_client_id, response, sync);
 	if (!ctx) {
 		perror("Failed to build context\n");
 		return NULL;
@@ -353,9 +434,8 @@ struct c_ticket_ctx* connect_to_server(struct rdma_event_channel* cm_event_chann
 		return NULL;
 	}
 
-	// printf("The client is connected successfully \n");
-	if(process_work_completion_events(ctx->cq, &wc, 1) != 1) {
-		perror("We failed to get 1 work completions \n");
+	if(send_client_metadata(ctx)) {
+		perror("Failed to send client metadata.\n");
 		return NULL;
 	}
 
@@ -391,21 +471,28 @@ int disconnect_from_server(struct rdma_event_channel* cm_event_channel, struct c
 	return ret;
 }
 
+void wait_on_sync(volatile uint64_t* sync) {
+	do {} while(*sync == 0);
+}
+
 void * rdma_client(void * in) {
 	struct c_ticket_ctx *ctx = NULL;
 	struct rdma_event_channel *cm_event_channel = ((struct rdma_client_in *) in)->cm_event_channel;
 	struct sockaddr_in server_sockaddr = ((struct rdma_client_in *) in)->server_sockaddr;
 	uint64_t *response = calloc(1, sizeof(uint64_t));
 	uint64_t *node_id = calloc(1, sizeof(uint64_t));
+	volatile uint64_t *sync = (volatile uint64_t *)malloc(sizeof(uint64_t));
+	*sync = 0;
 	int critical_section = ((struct rdma_client_in *) in)->critical_section;
 	int noncritical_section = ((struct rdma_client_in *) in)->noncritical_section;
 	int num_aquire = ((struct rdma_client_in *) in)->num_aquire;
-	// clock_t b_acquire, e_acquire, b_release, e_release;
 	clock_t start, end;
 
 	pthread_mutex_lock(event_manager_lock);
-	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response);
+	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, sync);
 	pthread_mutex_unlock(event_manager_lock);
+
+	
 	start = clock();
 
 	for (int i = 0; i < num_aquire; i++) {
@@ -436,6 +523,7 @@ void * rdma_client(void * in) {
 	pthread_mutex_unlock(event_manager_lock);
 	/* We free the buffers */
 	free(response);
+	free((uint64_t *)sync);
 
 	printf("%f\n",((double)(num_aquire * critical_section))/((double)(end-start)/CLOCKS_PER_SEC));
 	return NULL;
