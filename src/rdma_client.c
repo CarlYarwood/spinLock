@@ -181,7 +181,7 @@ struct c_ticket_ctx* build_client_ticket_context(struct rdma_cm_id* client_id, u
 	if(!client_metadata_mr) {
 		perror("Failed to register client metadata, errno: %d \n");
 		rdma_destroy_qp(client_id);
-		rdma_buffer_deregister(client_metadata_mr)
+		rdma_buffer_deregister(client_metadata_mr);
 		rdma_buffer_deregister(server_metadata_mr);
 		rdma_buffer_deregister(response_mr);
         ibv_destroy_cq(cq);
@@ -245,7 +245,7 @@ int destroy_context(struct c_ticket_ctx* ctx){
 	return ret;
 }
 
-int send_client_metadata(struct c_spin_ctx* ctx) {
+int send_client_metadata(struct c_ticket_ctx* ctx) {
 	struct ibv_wc wc;
 	struct ibv_sge client_send_sge;
 	struct ibv_send_wr client_send_wr, *bad_client_send_wr = NULL;
