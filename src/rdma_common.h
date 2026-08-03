@@ -54,7 +54,7 @@
 /* Default port where the RDMA server is listening */
 #define DEFAULT_RDMA_PORT (20886)
 
-#define NUM_NODES (30)
+#define NUM_NODES (60)
 
 #define SYNC (0)
 
