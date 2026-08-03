@@ -43,7 +43,7 @@
 
 #endif /* ACN_RDMA_DEBUG */
 
-#define NUM_NODES (30)
+#define NUM_NODES (62)
 
 #define SYNC (0)
 
