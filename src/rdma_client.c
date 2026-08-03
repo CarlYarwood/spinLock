@@ -27,7 +27,7 @@ void noop(volatile int *dummy) {
     *dummy = *dummy; 
 }
 
-struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *response, uint64_t* sync) {
+struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint64_t *response, volatile uint64_t* sync) {
 	struct c_spin_ctx *ctx = NULL;
 	struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -147,7 +147,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	}
 	debug("Receive buffer pre-posting is successful \n");
 
-	sync_mr = rdam_buffer_register(pd, sync, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC));
+	sync_mr = rdma_buffer_register(pd, sync, sizeof(uint64_t), (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC));
 	if (!sync_mr) {
 		perror("Failed to setup sync mr: %d \n");
 		rdma_destroy_qp(client_id);
@@ -164,7 +164,7 @@ struct c_spin_ctx* build_client_spin_context(struct rdma_cm_id* client_id, uint6
 	client_metadata_attr->address = (uint64_t)sync_mr->addr;
 	client_metadata_attr->length = (uint32_t)sync_mr->length;
 	client_metadata_attr->stag.remote_stag = (uint32_t)sync_mr->rkey;
-	client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE));
+	client_metadata_mr = rdma_buffer_register(pd, client_metadata_attr, sizeof(struct rdma_buffer_attr), (IBV_ACCESS_LOCAL_WRITE));
 	if(!client_metadata_mr) {
 		perror("Failed to setup client metadata mr: %d \n");
 		rdma_destroy_qp(client_id);
@@ -237,10 +237,10 @@ int send_client_metadata(struct c_spin_ctx* ctx) {
 	struct ibv_send_wr client_send_wr, *bad_client_send_wr = NULL;
 
 	client_send_sge.addr = (uint64_t)(ctx->client_metadata_attr);
-	client_send_sge.length = (uint32_t) sizeof(*struct rdma_buffer_attr);
+	client_send_sge.length = (uint32_t) sizeof(struct rdma_buffer_attr);
 	client_send_sge.lkey = (uint32_t) (ctx->server_metadata_mr)->lkey;
 
-	bzer(&client_send_wr, sizeof(client_send_wr));
+	bzero(&client_send_wr, sizeof(client_send_wr));
 	client_send_wr.sg_list = &client_send_sge;
 	client_send_wr.num_sge = 1;
 	client_send_wr.opcode = IBV_WR_SEND;
@@ -310,7 +310,7 @@ int release_lock(struct c_spin_ctx *ctx, uint64_t* node_id, uint64_t *response) 
 	return 0;
 }
 
-struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, uint64_t *sync) {
+struct c_spin_ctx* connect_to_server(struct rdma_event_channel* cm_event_channel, struct sockaddr_in* server_sockaddr, uint64_t *response, volatile uint64_t *sync) {
 	struct c_spin_ctx *ctx = NULL;
 	struct rdma_cm_id *cm_client_id = NULL;
 	struct rdma_cm_event *cm_event = NULL;
@@ -440,7 +440,7 @@ void * rdma_client(void * in) {
 	cm_event_channel = rdma_create_event_channel();
 	if (!cm_event_channel) {
 		rdma_error("Creating cm event channel failed, errno: %d \n", -errno);
-		return -errno;
+		return NULL;
 	}
 	
 	ctx = connect_to_server(cm_event_channel, &server_sockaddr, response, sync);
@@ -474,7 +474,7 @@ void * rdma_client(void * in) {
 	/* We free the buffers */
 	free(node_id);
 	free(response);
-	free(sync);
+	free((int *)sync);
 
 	rdma_destroy_event_channel(cm_event_channel);
 
