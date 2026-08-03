@@ -297,8 +297,8 @@ int main(int argc, char** argv) {
 
     buffer = (uint64_t *)malloc(sizeof(uint64_t));
     lock = calloc(2, sizeof(uint64_t));
-    ticket[NEXT] = 0;
-    ticket[NOW] = 0;
+    lock[NEXT] = 0;
+    lock[NOW] = 0;
     *buffer = 0;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
