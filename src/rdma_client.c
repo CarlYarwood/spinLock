@@ -438,7 +438,6 @@ int acquire_lock(struct rdma_cm_id ** id_arr, uint64_t *node_id, uint64_t *buffe
 }
 
 int release_lock(struct rdma_cm_id** id_arr, uint64_t* node_id, uint64_t *buffer, volatile uint64_t* metadata) {
-    next = metadata[NEXT];
 	if (metadata[NEXT] == 0) {
         compare_and_swap(id_arr[SERVER], *node_id, 0, LOCK);
         if(*buffer == *node_id) {
@@ -749,7 +748,7 @@ void* rdma_client(void *in) {
     server_sockaddr.sin_port = htons(port[0]);
 	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, SERVER, buffer, metadata);
 
-	wait_on_sync(metadata[SYNC]);
+	wait_on_sync(&metadata[SYNC]);
 
 	
 
@@ -820,7 +819,7 @@ void* rdma_client(void *in) {
 
 	free(node_id);
     free(buffer);
-    free(metadata);
+    free((void *)metadata);
     free(id_arr);
 
 	if (rdma_destroy_id(cm_server_id)) {
