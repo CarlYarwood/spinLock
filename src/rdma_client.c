@@ -625,7 +625,7 @@ void* rdma_client(void *in) {
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
 	metadata[SYNC] = 0;
-    metadata[GO] = 0
+    metadata[GO] = 0;
 	bzero(&client_server_sockaddr, sizeof client_server_sockaddr);
 	client_server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	client_server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */

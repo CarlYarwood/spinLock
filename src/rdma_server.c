@@ -89,7 +89,7 @@ struct s_mcs_ctx* build_server_spin_context(struct rdma_cm_id* client_id, volati
         return NULL;
     }
 
-    lock_mr = rdma_buffer_register(pd, lock, sizeof(uint64_t) * 2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    lock_mr = rdma_buffer_register(pd, (void *)lock, sizeof(uint64_t) * 2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!lock_mr){
         rdma_error("Server failed to create lock memory region \n");
         ibv_destroy_cq(cq);
@@ -420,7 +420,7 @@ int main(int argc, char** argv) {
 
     free(id_arr);
     free(buffer);
-    free(lock);
+    free((void *)lock);
 	if (rdma_destroy_id(cm_server_id)) {
 		rdma_error("Failed to destroy server id cleanly, %d \n", -errno);
 	}
