@@ -12,7 +12,7 @@ struct s_mcs_ctx {
     struct rdma_buffer_attr* client_metadata_attr;
 };
 
-struct s_mcs_ctx* build_server_spin_context(struct rdma_cm_id* client_id, uint64_t *lock, uint64_t *buffer) {
+struct s_mcs_ctx* build_server_spin_context(struct rdma_cm_id* client_id, volatile uint64_t *lock, uint64_t *buffer) {
     struct s_mcs_ctx* ctx;
     struct ibv_pd* pd = NULL;
     struct ibv_comp_channel* comp = NULL;
@@ -89,7 +89,7 @@ struct s_mcs_ctx* build_server_spin_context(struct rdma_cm_id* client_id, uint64
         return NULL;
     }
 
-    lock_mr = rdma_buffer_register(pd, lock, sizeof(*lock), (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    lock_mr = rdma_buffer_register(pd, lock, sizeof(uint64_t) * 2, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!lock_mr){
         rdma_error("Server failed to create lock memory region \n");
         ibv_destroy_cq(cq);
@@ -271,10 +271,10 @@ int rdma_write(struct rdma_cm_id *client_id, int offset) {
 
 }
 
-int notify_clients(struct rdma_cm_id ** id_arr, uint64_t *buffer) {
+int notify_clients(struct rdma_cm_id ** id_arr, uint64_t *buffer, int offset) {
     *buffer = 1;
     for (int i = 0; i < NUM_NODES ; i++) {
-        if(rdma_write(id_arr[i], SYNC)){
+        if(rdma_write(id_arr[i], offset)){
             printf("Failed to send sync");
         }
     }
@@ -286,7 +286,7 @@ int main(int argc, char** argv) {
 	struct sockaddr_in server_sockaddr;
     struct rdma_event_channel *cm_event_channel = NULL;
     struct rdma_cm_id *cm_server_id = NULL;
-    uint64_t *lock = NULL;
+    volatile uint64_t *lock = NULL;
     uint64_t *buffer = NULL;
     struct rdma_cm_id ** id_arr;
     id_arr = (struct rdma_cm_id **)malloc(sizeof(struct rdma_cm_id *) * NUM_NODES);
@@ -295,8 +295,9 @@ int main(int argc, char** argv) {
     }
 
     buffer = (uint64_t *)malloc(sizeof(uint64_t));
-    lock = calloc(1, sizeof(uint64_t));
-    *lock = 0;
+    lock = calloc(2, sizeof(uint64_t));
+    lock[LOCK] = 0;
+    lock[READY] = 0;
     *buffer = 0;
 	bzero(&server_sockaddr, sizeof server_sockaddr);
 	server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
@@ -326,7 +327,10 @@ int main(int argc, char** argv) {
 
     do {
         if(num_conn == NUM_NODES) {
-            notify_clients(id_arr, buffer);
+            notify_clients(id_arr, buffer, SYNC);
+            do {} while (lock[READY] != num_conn);
+            notify_clients(id_arr, buffer, GO);
+            lock[READY] = 0;
         }
         struct rdma_cm_event *cm_event = NULL;
         struct rdma_cm_id* client_id = NULL;

@@ -595,8 +595,8 @@ int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_e
 	return ret;
 }
 
-void wait_on_sync(volatile uint64_t *sync) {
-	do {} while(*sync == 0);
+void wait_on_data(volatile uint64_t *data) {
+	do {} while(*data == 0);
 }
 
 void* rdma_client(void *in) {
@@ -620,11 +620,12 @@ void* rdma_client(void *in) {
         id_arr[i] = NULL;
     }
 
-    metadata = calloc(3, sizeof(uint64_t));
+    metadata = calloc(4, sizeof(uint64_t));
     buffer = calloc(1, sizeof(uint64_t));
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
 	metadata[SYNC] = 0;
+    metadata[GO] = 0
 	bzero(&client_server_sockaddr, sizeof client_server_sockaddr);
 	client_server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	client_server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -650,7 +651,17 @@ void* rdma_client(void *in) {
 		rdma_error("rdma_listen failed to listen on server address, errno: %d ", -errno);
 		return NULL;
 	}
-	sleep(10);
+	
+    bzero(&server_sockaddr, sizeof server_sockaddr);
+    server_sockaddr.sin_family = AF_INET;    
+    if (get_addr(address[0], (struct sockaddr*) &server_sockaddr)) {
+		rdma_error("Invalid IP \n");
+		return NULL;
+	}
+    server_sockaddr.sin_port = htons(port[0]);
+	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, SERVER, buffer, metadata);
+
+    wait_on_data(&metadata[SYNC]);
 
     while(num_conn < (*node_id) - 1) {
         struct rdma_cm_event *cm_event = NULL;
@@ -739,16 +750,9 @@ void* rdma_client(void *in) {
         id_arr[i] = mcs_connect(&client_sockaddr, cm_event_channel, node_id, i, buffer, metadata);
     }
 
-	bzero(&server_sockaddr, sizeof server_sockaddr);
-    server_sockaddr.sin_family = AF_INET;    
-    if (get_addr(address[0], (struct sockaddr*) &server_sockaddr)) {
-		rdma_error("Invalid IP \n");
-		return NULL;
-	}
-    server_sockaddr.sin_port = htons(port[0]);
-	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, SERVER, buffer, metadata);
+    fetch_and_add(id_arr[SERVER], READY);
 
-	wait_on_sync(&metadata[SYNC]);
+	wait_on_data(&metadata[GO]);
 
 	
 
