@@ -208,7 +208,7 @@ struct c_mcs_ctx* build_mcs_context(struct rdma_cm_id* client_id, volatile uint6
         return NULL;
     }
 
-    metadata_mr = rdma_buffer_register(pd, (void *) metadata, sizeof(uint64_t) * 3, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    metadata_mr = rdma_buffer_register(pd, (void *) metadata, sizeof(uint64_t) * 4, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!metadata_mr){
         rdma_error("Server failed to create buffer memory region \n");
         rdma_buffer_deregister(buffer_mr);
