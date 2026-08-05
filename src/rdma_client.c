@@ -208,7 +208,7 @@ struct c_mcs_ctx* build_mcs_context(struct rdma_cm_id* client_id, volatile uint6
         return NULL;
     }
 
-    metadata_mr = rdma_buffer_register(pd, (void *) metadata, sizeof(uint64_t) * 4, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
+    metadata_mr = rdma_buffer_register(pd, (void *) metadata, sizeof(uint64_t) * 3, (IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_READ|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_ATOMIC));
     if(!metadata_mr){
         rdma_error("Server failed to create buffer memory region \n");
         rdma_buffer_deregister(buffer_mr);
@@ -595,8 +595,8 @@ int mcs_disconnect(struct rdma_cm_id* client_id, struct rdma_event_channel* cm_e
 	return ret;
 }
 
-void wait_on_data(volatile uint64_t *data) {
-	do {} while(*data == 0);
+void wait_on_data(volatile uint64_t *data, uint64_t val) {
+	do {} while(*data != val);
 }
 
 void* rdma_client(void *in) {
@@ -620,12 +620,11 @@ void* rdma_client(void *in) {
         id_arr[i] = NULL;
     }
 
-    metadata = calloc(4, sizeof(uint64_t));
+    metadata = calloc(3, sizeof(uint64_t));
     buffer = calloc(1, sizeof(uint64_t));
     metadata[NEXT] = 0;
     metadata[NOTIFY] = 0;
 	metadata[SYNC] = 0;
-    metadata[GO] = 0;
 	bzero(&client_server_sockaddr, sizeof client_server_sockaddr);
 	client_server_sockaddr.sin_family = AF_INET; /* standard IP NET address */
 	client_server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY); /* passed address */
@@ -661,7 +660,7 @@ void* rdma_client(void *in) {
     server_sockaddr.sin_port = htons(port[0]);
 	id_arr[SERVER] = mcs_connect(&server_sockaddr, cm_event_channel, node_id, SERVER, buffer, metadata);
 
-    wait_on_data(&metadata[SYNC]);
+    wait_on_data(&metadata[SYNC], 1);
 
     while(num_conn < (*node_id) - 1) {
         struct rdma_cm_event *cm_event = NULL;
@@ -752,7 +751,7 @@ void* rdma_client(void *in) {
 
     fetch_and_add(id_arr[SERVER], READY);
 
-	wait_on_data(&metadata[GO]);
+	wait_on_data(&metadata[SYNC], 2);
 
 	
 

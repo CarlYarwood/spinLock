@@ -31,7 +31,6 @@
 #define NEXT (0)
 #define NOTIFY (1)
 #define SYNC (2)
-#define GO (3)
 
 #define LOCK (0)
 #define READY (1)

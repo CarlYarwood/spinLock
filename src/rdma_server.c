@@ -271,8 +271,8 @@ int rdma_write(struct rdma_cm_id *client_id, int offset) {
 
 }
 
-int notify_clients(struct rdma_cm_id ** id_arr, uint64_t *buffer, int offset) {
-    *buffer = 1;
+int notify_clients(struct rdma_cm_id ** id_arr, uint64_t *buffer, uint64_t val, int offset) {
+    *buffer = val;
     for (int i = 0; i < NUM_NODES ; i++) {
         if(rdma_write(id_arr[i], offset)){
             printf("Failed to send sync");
@@ -327,9 +327,9 @@ int main(int argc, char** argv) {
 
     do {
         if(num_conn == NUM_NODES) {
-            notify_clients(id_arr, buffer, SYNC);
+            notify_clients(id_arr, buffer, 1, SYNC);
             do {} while (lock[READY] != num_conn);
-            notify_clients(id_arr, buffer, GO);
+            notify_clients(id_arr, buffer, 2, SYNC);
             lock[READY] = 0;
         }
         struct rdma_cm_event *cm_event = NULL;
